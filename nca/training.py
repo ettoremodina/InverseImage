@@ -9,10 +9,12 @@ Progressive Training Strategy:
 - Uses mixed precision (FP16) to reduce memory usage by ~50%
 """
 
+from pathlib import Path
+
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 
 from .config import Config, ResolutionStage
@@ -41,7 +43,7 @@ class Trainer:
             config.lr_gamma
         )
         
-        self.scaler = GradScaler() if config.use_mixed_precision else None
+        self.scaler = GradScaler('cuda') if config.use_mixed_precision else None
     
     def train(self, target_path, seed=None, verbose=True):
         target = load_image(target_path, self.config)
@@ -54,29 +56,42 @@ class Trainer:
         self.losses = []
         iterator = tqdm(range(self.config.n_epochs)) if verbose else range(self.config.n_epochs)
         
-        for epoch in iterator:
-            self.optimizer.zero_grad()
-            
-            if self.config.use_mixed_precision and self.config.device == 'cuda':
-                with autocast():
+        try:
+            for epoch in iterator:
+                self.optimizer.zero_grad()
+                
+                if self.config.use_mixed_precision and self.config.device == 'cuda':
+                    with autocast('cuda'):
+                        result = self.model(model_in, steps=self.config.steps_per_epoch)
+                        loss = F.mse_loss(result[:, :4], target_batch)
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
                     result = self.model(model_in, steps=self.config.steps_per_epoch)
                     loss = F.mse_loss(result[:, :4], target_batch)
-                self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                result = self.model(model_in, steps=self.config.steps_per_epoch)
-                loss = F.mse_loss(result[:, :4], target_batch)
-                loss.backward()
-                self.optimizer.step()
-            
-            self.scheduler.step()
-            self.losses.append(loss.item())
-            
-            if verbose and epoch % self.config.log_interval == 0:
-                tqdm.write(f"Epoch {epoch}: Loss = {loss.item():.6f}")
+                    loss.backward()
+                    self.optimizer.step()
+                
+                self.scheduler.step()
+                self.losses.append(loss.item())
+                
+                if verbose and epoch % self.config.log_interval == 0:
+                    tqdm.write(f"Epoch {epoch}: Loss = {loss.item():.6f}")
+        
+        except KeyboardInterrupt:
+            print(f"\nInterrupted at epoch {epoch}. Saving model...")
+            self._save_interrupt(target_path, epoch)
+            raise
         
         return self.losses
+    
+    def _save_interrupt(self, target_path, epoch):
+        output_dir = Path(self.config.output_dir)
+        output_dir.mkdir(exist_ok=True)
+        image_name = Path(target_path).stem
+        path = output_dir / f"{image_name}_interrupted_epoch{epoch}_model.pt"
+        self.save_model(str(path))
     
     def save_model(self, path):
         torch.save({
@@ -116,12 +131,15 @@ class ProgressiveTrainer:
     - High-res training only needs to refine, not learn from scratch
     """
     
-    def __init__(self, model: CAModel, config: Config):
+    def __init__(self, model: CAModel, config: Config, output_dir: str = None):
         self.model = model
         self.config = config
         self.all_losses = {}
+        self.output_dir = Path(output_dir) if output_dir else Path(config.output_dir)
+        self.output_dir.mkdir(exist_ok=True)
+        self.base_name = Path(config.image_path).stem
         
-        self.scaler = GradScaler() if config.use_mixed_precision else None
+        self.scaler = GradScaler('cuda') if config.use_mixed_precision else None
     
     def _create_optimizer(self, lr: float):
         """Create fresh optimizer (needed when changing resolution)."""
@@ -168,43 +186,68 @@ class ProgressiveTrainer:
         
         losses = []
         iterator = tqdm(range(stage.epochs)) if verbose else range(stage.epochs)
+        current_epoch = 0
         
-        for epoch in iterator:
-            optimizer.zero_grad()
-            accumulated_loss = 0.0
-            
-            # Gradient accumulation loop
-            for acc_step in range(stage.accumulation_steps):
-                model_in = model_in_template.clone()
+        try:
+            for epoch in iterator:
+                current_epoch = epoch
+                optimizer.zero_grad()
+                accumulated_loss = 0.0
                 
-                if self.config.use_mixed_precision and self.config.device == 'cuda':
-                    with autocast():
+                for acc_step in range(stage.accumulation_steps):
+                    model_in = model_in_template.clone()
+                    
+                    if self.config.use_mixed_precision and self.config.device == 'cuda':
+                        with autocast('cuda'):
+                            result = self.model(model_in, steps=self.config.steps_per_epoch)
+                            loss = F.mse_loss(result[:, :4], target_batch)
+                            loss = loss / stage.accumulation_steps
+                        self.scaler.scale(loss).backward()
+                    else:
                         result = self.model(model_in, steps=self.config.steps_per_epoch)
                         loss = F.mse_loss(result[:, :4], target_batch)
-                        loss = loss / stage.accumulation_steps  # Scale for accumulation
-                    self.scaler.scale(loss).backward()
-                else:
-                    result = self.model(model_in, steps=self.config.steps_per_epoch)
-                    loss = F.mse_loss(result[:, :4], target_batch)
-                    loss = loss / stage.accumulation_steps
-                    loss.backward()
+                        loss = loss / stage.accumulation_steps
+                        loss.backward()
+                    
+                    accumulated_loss += loss.item()
                 
-                accumulated_loss += loss.item()
-            
-            # Update weights after accumulating all gradients
-            if self.config.use_mixed_precision and self.config.device == 'cuda':
-                self.scaler.step(optimizer)
-                self.scaler.update()
-            else:
-                optimizer.step()
-            
-            scheduler.step()
-            losses.append(accumulated_loss)
-            
-            if verbose and epoch % self.config.log_interval == 0:
-                tqdm.write(f"[{stage.size}x{stage.size}] Epoch {epoch}: Loss = {accumulated_loss:.6f}")
+                if self.config.use_mixed_precision and self.config.device == 'cuda':
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
+                else:
+                    optimizer.step()
+                
+                scheduler.step()
+                losses.append(accumulated_loss)
+                
+                if verbose and epoch % self.config.log_interval == 0:
+                    tqdm.write(f"[{stage.size}x{stage.size}] Epoch {epoch}: Loss = {accumulated_loss:.6f}")
+        
+        except KeyboardInterrupt:
+            print(f"\nInterrupted at stage {stage.size}x{stage.size}, epoch {current_epoch}. Saving...")
+            self._save_checkpoint(stage.size, current_epoch, interrupted=True)
+            raise
         
         return losses
+    
+    def _save_checkpoint(self, size: int, epoch: int = None, interrupted: bool = False):
+        """Save model and animation at current state."""
+        suffix = f"_interrupted_epoch{epoch}" if interrupted else ""
+        model_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_model.pt"
+        self.save_model(str(model_path))
+        
+        temp_config = Config(
+            target_size=size,
+            device=self.config.device,
+            channel_n=self.config.channel_n
+        )
+        seed = create_seed(temp_config)
+        frames = self.model.generate_frames(seed, self.config.animation_steps)
+        
+        from .visualization import save_animation
+        gif_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_animation.gif"
+        save_animation(frames, str(gif_path))
+        print(f"Checkpoint saved: {model_path.name}, {gif_path.name}")
     
     def train(self, verbose: bool = True):
         """
@@ -220,14 +263,14 @@ class ProgressiveTrainer:
         current_lr = self.config.lr
         
         for i, stage in enumerate(self.config.progressive_stages):
-            # Reduce learning rate for fine-tuning stages
             if i > 0:
                 current_lr = current_lr * 0.5
             
             losses = self.train_stage(stage, lr=current_lr, verbose=verbose)
             self.all_losses[stage.size] = losses
             
-            # Clear GPU cache between stages
+            self._save_checkpoint(stage.size)
+            
             if self.config.device == 'cuda':
                 torch.cuda.empty_cache()
         

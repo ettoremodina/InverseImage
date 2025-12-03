@@ -42,7 +42,7 @@ def get_unique_name(output_dir: Path, base_name: str, extension: str) -> str:
 def train_progressive(config: Config, output_dir: Path):
     """Train progressively through multiple resolutions."""
     model = CAModel(config).to(config.device)
-    trainer = ProgressiveTrainer(model, config)
+    trainer = ProgressiveTrainer(model, config, output_dir=str(output_dir))
     
     all_losses = trainer.train()
     
@@ -79,13 +79,13 @@ def train_single_resolution(config: Config, output_dir: Path):
 
 
 def main():
-    # config = Config()
+    config = Config()
     # Experiment: single resolution training at 128x128 for 400 epochs
-    config = Config(
-        target_size=128,
-        n_epochs=400,
-        progressive_stages=[],  # No progressive training
-    )
+    # config = Config(
+    #     target_size=128,
+    #     n_epochs=1000,
+    #     progressive_stages=[],  # No progressive training
+    # )
     
     output_dir = Path(config.output_dir)
     output_dir.mkdir(exist_ok=True)

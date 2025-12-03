@@ -37,7 +37,7 @@ class Config:
     update_rate: float = 0.5
     
     # Image settings
-    image_path: str = 'images/ragnopieno.png'
+    image_path: str = 'images/ragnopiccolo.png'
     target_size: int = 128  # Used for single-resolution training
     target_padding: int = 16
     
@@ -56,7 +56,7 @@ class Config:
     # to maintain effective batch size while fitting in memory
     progressive_stages: List[ResolutionStage] = field(default_factory=lambda: [
         ResolutionStage(size=40, epochs=800, batch_size=8, accumulation_steps=1),
-        ResolutionStage(size=128, epochs=400, batch_size=2, accumulation_steps=4),
+        ResolutionStage(size=128, epochs=800, batch_size=2, accumulation_steps=4),
         # ResolutionStage(size=256, epochs=200, batch_size=1, accumulation_steps=8),
     ])
     
@@ -65,8 +65,8 @@ class Config:
     
     # Output settings
     output_dir: str = 'outputs'
-    save_gif: bool = False
-    animation_steps: int = 200
+    save_gif: bool = True
+    animation_steps: int = steps_per_epoch * 2
     
     # Misc
     device: str = None

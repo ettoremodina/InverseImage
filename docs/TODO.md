@@ -6,9 +6,6 @@
 # test
 ## number of epochs
 ## grid size
-## imagees
+## images
 
-
-# function to create images (testing purpose)
-
-# move to scripts
+# save on interrupt (KeyboardInterrupt)
