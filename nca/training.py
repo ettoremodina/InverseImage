@@ -112,7 +112,7 @@ class Trainer:
         print(f"Model saved to {path}")
     
     def load_model(self, path):
-        checkpoint = torch.load(path, map_location=self.config.device)
+        checkpoint = torch.load(path, map_location=self.config.device, weights_only=False)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Model loaded from {path}")
 

@@ -5,6 +5,8 @@ Visualization utilities for hybrid SCA-NCA.
 import numpy as np
 import torch
 from PIL import Image
+import imageio
+from pathlib import Path
 
 
 def _frame_to_rgb(frame, bg_color=(255, 255, 255)):
@@ -27,6 +29,7 @@ def _frame_to_rgb(frame, bg_color=(255, 255, 255)):
 def save_combined_animation(sca_frames: list, nca_frames: list, save_path: str, fps: int = 20):
     """
     Save combined animation: SCA frames first, then NCA frames.
+    Saves both GIF and MP4 formats.
     """
     print(f"   Processing {len(sca_frames)} SCA frames...")
     all_frames = [_frame_to_rgb(f) for f in sca_frames]
@@ -42,11 +45,15 @@ def save_combined_animation(sca_frames: list, nca_frames: list, save_path: str, 
         duration=1000 // fps,
         loop=0
     )
-    print(f"Saved combined animation ({len(sca_frames)} SCA + {len(nca_frames)} NCA frames) to {save_path}")
+    print(f"Saved combined GIF ({len(sca_frames)} SCA + {len(nca_frames)} NCA frames) to {save_path}")
+    
+    mp4_path = str(Path(save_path).with_suffix('.mp4'))
+    imageio.mimsave(mp4_path, [np.array(f) for f in all_frames], fps=fps)
+    print(f"Saved combined MP4 to {mp4_path}")
 
 
 def save_frames_as_gif(frames: list, save_path: str, fps: int = 20):
-    """Save a list of frames as GIF."""
+    """Save a list of frames as GIF and MP4."""
     pil_frames = [_frame_to_rgb(f) for f in frames]
     
     pil_frames[0].save(
@@ -56,7 +63,11 @@ def save_frames_as_gif(frames: list, save_path: str, fps: int = 20):
         duration=1000 // fps,
         loop=0
     )
-    print(f"Saved animation ({len(pil_frames)} frames) to {save_path}")
+    print(f"Saved GIF ({len(pil_frames)} frames) to {save_path}")
+    
+    mp4_path = str(Path(save_path).with_suffix('.mp4'))
+    imageio.mimsave(mp4_path, [np.array(f) for f in pil_frames], fps=fps)
+    print(f"Saved MP4 to {mp4_path}")
 
 
 def save_frame_as_image(frame, save_path: str):

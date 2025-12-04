@@ -8,6 +8,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.animation import FuncAnimation
 from typing import List, Optional, Tuple
 from pathlib import Path
+import imageio
 
 from .tree import Tree
 from .config import SCAConfig
@@ -162,7 +163,11 @@ def animate_growth(
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         print(f"Saving animation ({len(frames_data)} frames)...")
         anim.save(save_path, writer='pillow', fps=20)
-        print(f"Saved animation to {save_path}")
+        print(f"Saved GIF to {save_path}")
+        
+        mp4_path = str(Path(save_path).with_suffix('.mp4'))
+        anim.save(mp4_path, writer='ffmpeg', fps=20)
+        print(f"Saved MP4 to {mp4_path}")
     
     plt.show()
     return anim

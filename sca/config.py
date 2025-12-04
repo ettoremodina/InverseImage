@@ -23,6 +23,7 @@ class SCAConfig:
     
     root_pos: Optional[Tuple[float, float]] = None
     max_iterations: int = 300
+    stagnation_limit: int = 100  # Stop if no attractors die for this many iterations
     
     animate: bool = False
     show_attractors: bool = True

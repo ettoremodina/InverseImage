@@ -28,6 +28,7 @@ class Tree:
         self.mask: np.ndarray = None
         self.mask_width: int = 0
         self.mask_height: int = 0
+        self._stagnation_counter: int = 0
         
         self._initialize()
     
@@ -203,8 +204,12 @@ class Tree:
         if not self.attractors:
             return False
         
+        if self._stagnation_counter >= self.config.stagnation_limit:
+            return False
+        
         self._reset_branch_counts()
         
+        attractor_count_before = len(self.attractors)
         branch_influences = self._associate_attractors()
         
         if not branch_influences:
@@ -215,6 +220,12 @@ class Tree:
         self.branches.extend(new_branches)
         
         self._cleanup_attractors()
+        
+        attractor_count_after = len(self.attractors)
+        if attractor_count_after == attractor_count_before:
+            self._stagnation_counter += 1
+        else:
+            self._stagnation_counter = 0
         
         self.spatial_index.rebuild(self.branches)
         
@@ -241,6 +252,8 @@ class Tree:
                 print(f"  Iteration {self.iteration}: {len(self.branches)} branches, "
                       f"{len(self.attractors)} attractors remaining")
         
+        if self._stagnation_counter >= self.config.stagnation_limit:
+            print(f"Growth stopped due to stagnation (no attractors died for {self.config.stagnation_limit} iterations)")
         print(f"Growth complete after {self.iteration} iterations")
         print(f"  Final branches: {len(self.branches)}")
         print(f"  Remaining attractors: {len(self.attractors)}")
