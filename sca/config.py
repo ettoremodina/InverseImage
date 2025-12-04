@@ -11,16 +11,20 @@ import numpy as np
 class SCAConfig:
     mask_image_path: str = 'images/ragnopiccolo.png'
     
-    # For 512x512 image - tuned for spider shape:
-    num_attractors: int = 5000
-    influence_radius: float = 200.0  # Large enough to reach attractors from root
-    kill_distance: float = 5.0       # Consume attractors when close
-    growth_step: float = 3.0         # Branch segment length
+    num_attractors: int = 8000        # More attractors = denser result
+    influence_radius: float = 120.0   # Slightly smaller for more local growth
+    kill_distance: float = 3.0        # Smaller = branches get closer to attractors
+    growth_step: float = 2.0          # Smaller = finer detail
+    
+    # Branching: lower threshold = more branching
+    # 0.3 = ~70 degrees, 0.5 = ~60 degrees, 0.7 = ~45 degrees
+    branch_angle_threshold: float = 0.3
+    min_attractors_per_branch: int = 2
     
     root_pos: Optional[Tuple[float, float]] = None
-    max_iterations: int = 2000
+    max_iterations: int = 200
     
-    animate: bool = False
+    animate: bool = True
     show_attractors: bool = True
     
     output_dir: str = 'outputs/sca'

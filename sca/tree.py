@@ -106,23 +106,76 @@ class Tree:
         
         return branch_influences
     
+    def _cluster_directions(self, branch: Branch, attractors: List[Attractor]) -> List[Vector2D]:
+        """
+        Cluster attractors by direction and return one growth direction per cluster.
+        This enables branching when attractors are spread in multiple directions.
+        """
+        if not attractors:
+            return []
+        
+        angle_threshold = self.config.branch_angle_threshold
+        min_per_branch = self.config.min_attractors_per_branch
+        
+        directions = []
+        for attractor in attractors:
+            d = (attractor.position - branch.end_pos).normalize()
+            directions.append(d)
+        
+        clusters: List[List[Vector2D]] = []
+        
+        for d in directions:
+            placed = False
+            for cluster in clusters:
+                cluster_avg = Vector2D(0, 0)
+                for cd in cluster:
+                    cluster_avg = cluster_avg + cd
+                cluster_avg = cluster_avg.normalize()
+                
+                dot = d.x * cluster_avg.x + d.y * cluster_avg.y
+                if dot > angle_threshold:
+                    cluster.append(d)
+                    placed = True
+                    break
+            
+            if not placed:
+                clusters.append([d])
+        
+        result = []
+        for cluster in clusters:
+            if len(cluster) < min_per_branch:
+                continue
+            avg = Vector2D(0, 0)
+            for d in cluster:
+                avg = avg + d
+            result.append(avg.normalize())
+        
+        if not result and directions:
+            avg = Vector2D(0, 0)
+            for d in directions:
+                avg = avg + d
+            result.append(avg.normalize())
+        
+        return result
+    
     def _grow_branches(self, branch_influences: Dict[Branch, List[Attractor]]) -> List[Branch]:
-        """Create new branches based on attractor influences."""
+        """Create new branches based on attractor influences, with directional clustering."""
         new_branches = []
         
         for branch, attractors in branch_influences.items():
             if not attractors:
                 continue
             
-            avg_direction = Vector2D(0, 0)
-            for attractor in attractors:
-                direction = (attractor.position - branch.end_pos).normalize()
-                avg_direction = avg_direction + direction
+            growth_directions = self._cluster_directions(branch, attractors)
             
-            avg_direction = avg_direction.normalize()
-            
-            new_branch = branch.create_child(avg_direction, self.config.growth_step)
-            new_branches.append(new_branch)
+            for direction in growth_directions:
+                new_end = branch.end_pos + direction * self.config.growth_step
+                
+                if not self._is_inside_mask(new_end):
+                    continue
+                
+                new_branch = branch.create_child(direction, self.config.growth_step)
+                new_branches.append(new_branch)
         
         return new_branches
     

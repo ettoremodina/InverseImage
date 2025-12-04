@@ -77,9 +77,14 @@ def animate_growth(
     branch_color: str = 'saddlebrown',
     branch_width: float = 1.0,
     figsize: Tuple[int, int] = (10, 10),
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    frame_skip: int = 10
 ) -> FuncAnimation:
-    """Create an animation of the tree growth process."""
+    """
+    Create an animation of the tree growth process.
+    
+    frame_skip: Only record every Nth iteration (default 10). Higher = faster, fewer frames.
+    """
     tree = Tree(config)
     
     fig, ax = plt.subplots(figsize=figsize)
@@ -106,7 +111,7 @@ def animate_growth(
             attractor_scatter.set_offsets(np.empty((0, 2)))
         return [branch_collection]
     
-    def collect_frames():
+    def collect_frame():
         frames_data.append({
             'segments': [
                 [(b.start_pos.x, b.start_pos.y), (b.end_pos.x, b.end_pos.y)]
@@ -119,12 +124,15 @@ def animate_growth(
             'iteration': tree.iteration
         })
     
-    collect_frames()
+    collect_frame()
     
     while tree.grow_step():
-        collect_frames()
+        if tree.iteration % frame_skip == 0:
+            collect_frame()
         if tree.iteration >= config.max_iterations:
             break
+    
+    collect_frame()
     
     print(f"Collected {len(frames_data)} frames for animation")
     
@@ -152,6 +160,7 @@ def animate_growth(
     
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        print(f"Saving animation ({len(frames_data)} frames)...")
         anim.save(save_path, writer='pillow', fps=20)
         print(f"Saved animation to {save_path}")
     

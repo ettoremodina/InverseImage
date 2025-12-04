@@ -25,7 +25,8 @@ def main():
             config,
             interval=50,
             show_attractors=config.show_attractors,
-            save_path=save_path
+            save_path=save_path,
+            frame_skip=20  # Only save every 20th frame for speed
         )
     else:
         tree = Tree(config)
