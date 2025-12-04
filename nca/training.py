@@ -78,6 +78,9 @@ class Trainer:
                 
                 if verbose and epoch % self.config.log_interval == 0:
                     tqdm.write(f"Epoch {epoch}: Loss = {loss.item():.6f}")
+                
+                if self.config.checkpoint_interval > 0 and epoch > 0 and epoch % self.config.checkpoint_interval == 0:
+                    self._save_checkpoint(target_path, epoch)
         
         except KeyboardInterrupt:
             print(f"\nInterrupted at epoch {epoch}. Saving model...")
@@ -91,6 +94,13 @@ class Trainer:
         output_dir.mkdir(exist_ok=True)
         image_name = Path(target_path).stem
         path = output_dir / f"{image_name}_interrupted_epoch{epoch}_model.pt"
+        self.save_model(str(path))
+    
+    def _save_checkpoint(self, target_path, epoch):
+        checkpoint_dir = Path(self.config.output_dir) / "checkpoints"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        image_name = Path(target_path).stem
+        path = checkpoint_dir / f"{image_name}_epoch{epoch}_model.pt"
         self.save_model(str(path))
     
     def save_model(self, path):
@@ -222,6 +232,9 @@ class ProgressiveTrainer:
                 
                 if verbose and epoch % self.config.log_interval == 0:
                     tqdm.write(f"[{stage.size}x{stage.size}] Epoch {epoch}: Loss = {accumulated_loss:.6f}")
+                
+                if self.config.checkpoint_interval > 0 and epoch > 0 and epoch % self.config.checkpoint_interval == 0:
+                    self._save_periodic_checkpoint(stage.size, epoch)
         
         except KeyboardInterrupt:
             print(f"\nInterrupted at stage {stage.size}x{stage.size}, epoch {current_epoch}. Saving...")
@@ -231,7 +244,7 @@ class ProgressiveTrainer:
         return losses
     
     def _save_checkpoint(self, size: int, epoch: int = None, interrupted: bool = False):
-        """Save model and animation at current state."""
+        """Save model and animation at current state (end of stage or interrupt)."""
         suffix = f"_interrupted_epoch{epoch}" if interrupted else ""
         model_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_model.pt"
         self.save_model(str(model_path))
@@ -248,6 +261,13 @@ class ProgressiveTrainer:
         gif_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_animation.gif"
         save_animation(frames, str(gif_path))
         print(f"Checkpoint saved: {model_path.name}, {gif_path.name}")
+    
+    def _save_periodic_checkpoint(self, size: int, epoch: int):
+        """Save model periodically during training."""
+        checkpoint_dir = self.output_dir / "checkpoints"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        path = checkpoint_dir / f"{self.base_name}_{size}x{size}_epoch{epoch}_model.pt"
+        self.save_model(str(path))
     
     def train(self, verbose: bool = True):
         """

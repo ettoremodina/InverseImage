@@ -55,8 +55,8 @@ class Config:
     # At higher resolutions, we use smaller batches but accumulate gradients
     # to maintain effective batch size while fitting in memory
     progressive_stages: List[ResolutionStage] = field(default_factory=lambda: [
-        ResolutionStage(size=40, epochs=800, batch_size=8, accumulation_steps=1),
-        ResolutionStage(size=128, epochs=800, batch_size=2, accumulation_steps=4),
+        ResolutionStage(size=40, epochs=1000, batch_size=8, accumulation_steps=1),
+        ResolutionStage(size=96, epochs=1500, batch_size=2, accumulation_steps=4),
         # ResolutionStage(size=256, epochs=200, batch_size=1, accumulation_steps=8),
     ])
     
@@ -67,6 +67,9 @@ class Config:
     output_dir: str = 'outputs'
     save_gif: bool = True
     animation_steps: int = steps_per_epoch * 2
+    
+    # Periodic checkpointing (0 = disabled)
+    checkpoint_interval: int = 0
     
     # Misc
     device: str = None
