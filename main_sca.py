@@ -23,10 +23,10 @@ def main():
         save_path = str(output_dir / f"{image_name}_growth.gif")
         animate_growth(
             config,
-            interval=50,
+            interval=100,
             show_attractors=config.show_attractors,
             save_path=save_path,
-            frame_skip=20  # Only save every 20th frame for speed
+            frame_skip=1  # Only save every frame for detailed animation
         )
     else:
         tree = Tree(config)

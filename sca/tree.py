@@ -15,6 +15,7 @@ from .attractor import Attractor
 from .branch import Branch
 from .spatial import BranchSpatialIndex
 from .mask import load_mask, sample_attractors, find_bottom_center, get_mask_dimensions
+from .profiling import profile, profile_block
 
 
 class Tree:
@@ -60,56 +61,45 @@ class Tree:
             return False
         return self.mask[y, x]
     
+    @profile
     def _associate_attractors(self) -> Dict[Branch, List[Attractor]]:
         """
-        For each attractor within influence radius of ANY tip, find its CLOSEST tip.
-        That attractor then influences only that one tip.
-        Returns mapping of branch tips to their list of influencing attractors.
+        Use KDTree batch query for O(n log m) instead of O(n*m).
         """
         influence_radius = self.config.influence_radius
         kill_distance = self.config.kill_distance
         
-        branch_influences: Dict[Branch, List[Attractor]] = {}
-        attractors_to_kill: Set[Attractor] = set()
-        
         tips = self.spatial_index.tips
-        if not tips:
+        if not tips or self.spatial_index.tree is None:
             return {}
         
-        for attractor in self.attractors:
-            if not attractor.alive:
-                continue
-            
-            min_dist = float('inf')
-            closest_tip = None
-            
-            for tip in tips:
-                dist = attractor.position.distance_to(tip.end_pos)
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_tip = tip
-            
-            if closest_tip is None:
-                continue
-            
-            if min_dist < kill_distance:
-                attractors_to_kill.add(attractor)
-                continue
-            
-            if min_dist < influence_radius:
-                if closest_tip not in branch_influences:
-                    branch_influences[closest_tip] = []
-                branch_influences[closest_tip].append(attractor)
+        living_attractors = [a for a in self.attractors if a.alive]
+        if not living_attractors:
+            return {}
         
-        for attractor in attractors_to_kill:
-            attractor.kill()
+        attractor_positions = np.array([[a.position.x, a.position.y] for a in living_attractors])
+        
+        min_distances, closest_tip_indices = self.spatial_index.query_batch(attractor_positions)
+        
+        kill_mask = min_distances < kill_distance
+        influence_mask = (min_distances >= kill_distance) & (min_distances < influence_radius)
+        
+        for i in np.where(kill_mask)[0]:
+            living_attractors[i].kill()
+        
+        branch_influences: Dict[Branch, List[Attractor]] = {}
+        for i in np.where(influence_mask)[0]:
+            tip = tips[closest_tip_indices[i]]
+            if tip not in branch_influences:
+                branch_influences[tip] = []
+            branch_influences[tip].append(living_attractors[i])
         
         return branch_influences
     
+    @profile
     def _cluster_directions(self, branch: Branch, attractors: List[Attractor]) -> List[Vector2D]:
         """
-        Cluster attractors by direction and return one growth direction per cluster.
-        This enables branching when attractors are spread in multiple directions.
+        Vectorized clustering of attractor directions.
         """
         if not attractors:
             return []
@@ -117,47 +107,61 @@ class Tree:
         angle_threshold = self.config.branch_angle_threshold
         min_per_branch = self.config.min_attractors_per_branch
         
-        directions = []
-        for attractor in attractors:
-            d = (attractor.position - branch.end_pos).normalize()
-            directions.append(d)
+        branch_pos = np.array([branch.end_pos.x, branch.end_pos.y])
+        attractor_positions = np.array([[a.position.x, a.position.y] for a in attractors])
         
-        clusters: List[List[Vector2D]] = []
+        diff = attractor_positions - branch_pos
+        norms = np.linalg.norm(diff, axis=1, keepdims=True)
+        norms[norms < 1e-10] = 1.0
+        directions = diff / norms
         
-        for d in directions:
-            placed = False
-            for cluster in clusters:
-                cluster_avg = Vector2D(0, 0)
-                for cd in cluster:
-                    cluster_avg = cluster_avg + cd
-                cluster_avg = cluster_avg.normalize()
-                
-                dot = d.x * cluster_avg.x + d.y * cluster_avg.y
-                if dot > angle_threshold:
-                    cluster.append(d)
-                    placed = True
-                    break
+        n = len(directions)
+        if n == 1:
+            return [Vector2D(directions[0, 0], directions[0, 1])]
+        
+        cluster_labels = np.full(n, -1, dtype=int)
+        cluster_sums = []
+        cluster_counts = []
+        
+        for i in range(n):
+            if cluster_labels[i] >= 0:
+                continue
             
-            if not placed:
-                clusters.append([d])
+            cluster_labels[i] = len(cluster_sums)
+            cluster_sums.append(directions[i].copy())
+            cluster_counts.append(1)
+            cluster_idx = cluster_labels[i]
+            
+            for j in range(i + 1, n):
+                if cluster_labels[j] >= 0:
+                    continue
+                
+                cluster_avg = cluster_sums[cluster_idx] / np.linalg.norm(cluster_sums[cluster_idx])
+                dot = np.dot(directions[j], cluster_avg)
+                
+                if dot > angle_threshold:
+                    cluster_labels[j] = cluster_idx
+                    cluster_sums[cluster_idx] += directions[j]
+                    cluster_counts[cluster_idx] += 1
         
         result = []
-        for cluster in clusters:
-            if len(cluster) < min_per_branch:
-                continue
-            avg = Vector2D(0, 0)
-            for d in cluster:
-                avg = avg + d
-            result.append(avg.normalize())
+        for idx, (csum, count) in enumerate(zip(cluster_sums, cluster_counts)):
+            if count >= min_per_branch:
+                norm = np.linalg.norm(csum)
+                if norm > 1e-10:
+                    normalized = csum / norm
+                    result.append(Vector2D(normalized[0], normalized[1]))
         
-        if not result and directions:
-            avg = Vector2D(0, 0)
-            for d in directions:
-                avg = avg + d
-            result.append(avg.normalize())
+        if not result and n > 0:
+            total = np.sum(directions, axis=0)
+            norm = np.linalg.norm(total)
+            if norm > 1e-10:
+                normalized = total / norm
+                result.append(Vector2D(normalized[0], normalized[1]))
         
         return result
     
+    @profile
     def _grow_branches(self, branch_influences: Dict[Branch, List[Attractor]]) -> List[Branch]:
         """Create new branches based on attractor influences, with directional clustering."""
         new_branches = []
@@ -171,6 +175,7 @@ class Tree:
             for direction in growth_directions:
                 new_end = branch.end_pos + direction * self.config.growth_step
                 
+                ### note: it could be removed
                 if not self._is_inside_mask(new_end):
                     continue
                 
@@ -179,10 +184,12 @@ class Tree:
         
         return new_branches
     
+    @profile
     def _cleanup_attractors(self):
         """Remove dead attractors from the list."""
         self.attractors = [a for a in self.attractors if a.alive]
     
+    @profile
     def _reset_branch_counts(self):
         """Reset the influence count on all branches."""
         for branch in self.branches:

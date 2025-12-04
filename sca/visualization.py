@@ -21,7 +21,7 @@ def visualize_tree(
     branch_width: float = 1.0,
     attractor_color: str = 'green',
     attractor_size: float = 1.0,
-    figsize: Tuple[int, int] = (10, 10),
+    figsize: Tuple[int, int] = (16, 16),
     save_path: Optional[str] = None
 ):
     """Visualize the current state of the tree."""
@@ -76,9 +76,9 @@ def animate_growth(
     show_attractors: bool = True,
     branch_color: str = 'saddlebrown',
     branch_width: float = 1.0,
-    figsize: Tuple[int, int] = (10, 10),
+    figsize: Tuple[int, int] = (16, 16),
     save_path: Optional[str] = None,
-    frame_skip: int = 10
+    frame_skip: int = 1
 ) -> FuncAnimation:
     """
     Create an animation of the tree growth process.

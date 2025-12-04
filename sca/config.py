@@ -11,20 +11,20 @@ import numpy as np
 class SCAConfig:
     mask_image_path: str = 'images/ragnopiccolo.png'
     
-    num_attractors: int = 8000        # More attractors = denser result
-    influence_radius: float = 120.0   # Slightly smaller for more local growth
-    kill_distance: float = 3.0        # Smaller = branches get closer to attractors
-    growth_step: float = 2.0          # Smaller = finer detail
+    num_attractors: int = 4000        # More attractors = denser result
+    influence_radius: float = 15.0   # Slightly smaller for more local growth
+    kill_distance: float = 2.0        # Smaller = branches get closer to attractors
+    growth_step: float = 1.0          # Smaller = finer detail
     
     # Branching: lower threshold = more branching
     # 0.3 = ~70 degrees, 0.5 = ~60 degrees, 0.7 = ~45 degrees
-    branch_angle_threshold: float = 0.3
+    branch_angle_threshold: float = 0.1
     min_attractors_per_branch: int = 2
     
     root_pos: Optional[Tuple[float, float]] = None
-    max_iterations: int = 200
+    max_iterations: int = 300
     
-    animate: bool = True
+    animate: bool = False
     show_attractors: bool = True
     
     output_dir: str = 'outputs/sca'
