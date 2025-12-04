@@ -45,13 +45,26 @@ def load_image(path, config: Config = None):
     return img_tensor
 
 
-def create_seed(config: Config = None):
-    """Create initial seed with a single active cell in the center."""
+def create_seed(config: Config = None, positions: list = None):
+    """
+    Create initial seed tensor.
+    
+    Args:
+        config: NCA configuration
+        positions: Optional list of (x, y) tuples for seed positions.
+                   If None, uses single center seed.
+    """
     if config is None:
         config = Config()
     
     size = config.target_size
     seed = torch.zeros(1, config.channel_n, size, size).to(config.device)
-    seed[:, 3:, size // 2, size // 2] = 1.0
+    
+    if positions is None:
+        seed[:, 3:, size // 2, size // 2] = 1.0
+    else:
+        for x, y in positions:
+            if 0 <= x < size and 0 <= y < size:
+                seed[:, 3:, int(y), int(x)] = 1.0
     
     return seed

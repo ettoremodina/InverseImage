@@ -25,12 +25,13 @@ from .data import load_image, create_seed
 class Trainer:
     """Handles training of the CAModel at a single resolution."""
     
-    def __init__(self, model: CAModel, config: Config = None):
+    def __init__(self, model: CAModel, config: Config = None, seed_positions: list = None):
         if config is None:
             config = Config()
         
         self.model = model
         self.config = config
+        self.seed_positions = seed_positions
         self.losses = []
         
         self.optimizer = optim.Adam(
@@ -50,7 +51,7 @@ class Trainer:
         target_batch = target.repeat(self.config.batch_size, 1, 1, 1)
         
         if seed is None:
-            seed = create_seed(self.config)
+            seed = create_seed(self.config, positions=self.seed_positions)
         model_in = seed.repeat(self.config.batch_size, 1, 1, 1)
         
         self.losses = []
@@ -141,9 +142,10 @@ class ProgressiveTrainer:
     - High-res training only needs to refine, not learn from scratch
     """
     
-    def __init__(self, model: CAModel, config: Config, output_dir: str = None):
+    def __init__(self, model: CAModel, config: Config, output_dir: str = None, seed_positions: list = None):
         self.model = model
         self.config = config
+        self.seed_positions = seed_positions
         self.all_losses = {}
         self.output_dir = Path(output_dir) if output_dir else Path(config.output_dir)
         self.output_dir.mkdir(exist_ok=True)
@@ -167,8 +169,17 @@ class ProgressiveTrainer:
             channel_n=self.config.channel_n
         )
         target = load_image(self.config.image_path, temp_config)
-        seed = create_seed(temp_config)
+        scaled_positions = self._scale_positions(stage.size) if self.seed_positions else None
+        seed = create_seed(temp_config, positions=scaled_positions)
         return target, seed
+    
+    def _scale_positions(self, target_size: int):
+        """Scale seed positions to target resolution."""
+        if not self.seed_positions:
+            return None
+        base_size = self.config.progressive_stages[0].size if self.config.progressive_stages else self.config.target_size
+        scale = target_size / base_size
+        return [(int(x * scale), int(y * scale)) for x, y in self.seed_positions]
     
     def train_stage(self, stage: ResolutionStage, lr: float, verbose: bool = True):
         """
@@ -254,7 +265,8 @@ class ProgressiveTrainer:
             device=self.config.device,
             channel_n=self.config.channel_n
         )
-        seed = create_seed(temp_config)
+        scaled_positions = self._scale_positions(size) if self.seed_positions else None
+        seed = create_seed(temp_config, positions=scaled_positions)
         frames = self.model.generate_frames(seed, self.config.animation_steps)
         
         from .visualization import save_animation
