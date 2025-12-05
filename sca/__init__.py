@@ -10,6 +10,7 @@ from .branch import Branch
 from .tree import Tree
 from .config import SCAConfig
 from .visualization import visualize_tree, animate_growth
+from .skeleton import extract_seed_positions, grow_sca_with_frames
 
 __all__ = [
     'Attractor',
@@ -17,5 +18,7 @@ __all__ = [
     'Tree',
     'SCAConfig',
     'visualize_tree',
-    'animate_growth'
+    'animate_growth',
+    'extract_seed_positions',
+    'grow_sca_with_frames'
 ]

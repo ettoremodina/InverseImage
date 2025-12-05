@@ -1,5 +1,8 @@
 """
 Configuration for Space Colonization Algorithm.
+
+Note: For pipeline usage, prefer using config.PipelineConfig which provides
+unified configuration for NCA, SCA, and rendering.
 """
 
 from dataclasses import dataclass
@@ -9,28 +12,43 @@ import numpy as np
 
 @dataclass
 class SCAConfig:
-    mask_image_path: str = 'images/ragnopiccolo.png'
-    
-    num_attractors: int = 4000        # More attractors = denser result
-    influence_radius: float = 15.0   # Slightly smaller for more local growth
-    kill_distance: float = 2.0        # Smaller = branches get closer to attractors
-    growth_step: float = 1.0          # Smaller = finer detail
-    
-    # Branching: lower threshold = more branching
-    # 0.3 = ~70 degrees, 0.5 = ~60 degrees, 0.7 = ~45 degrees
+    mask_image_path: str = 'images/Brini.png'
+
+    num_attractors: int = 2000
+    influence_radius: float = 15.0
+    kill_distance: float = 2.0
+    growth_step: float = 1.0
+
     branch_angle_threshold: float = 0.1
     min_attractors_per_branch: int = 2
-    
+
     root_pos: Optional[Tuple[float, float]] = None
-    max_iterations: int = 300
-    stagnation_limit: int = 100  # Stop if no attractors die for this many iterations
-    
+    max_iterations: int = 800
+    stagnation_limit: int = 100
+
     animate: bool = False
     show_attractors: bool = True
-    
+
     output_dir: str = 'outputs/sca'
     random_seed: Optional[int] = None
-    
+
     def __post_init__(self):
         if self.random_seed is not None:
             np.random.seed(self.random_seed)
+
+    @classmethod
+    def from_pipeline(cls, pipeline_config) -> 'SCAConfig':
+        """Create SCA Config from PipelineConfig."""
+        return cls(
+            mask_image_path=pipeline_config.target_image,
+            num_attractors=pipeline_config.num_attractors,
+            influence_radius=pipeline_config.influence_radius,
+            kill_distance=pipeline_config.kill_distance,
+            growth_step=pipeline_config.growth_step,
+            branch_angle_threshold=pipeline_config.branch_angle_threshold,
+            min_attractors_per_branch=pipeline_config.min_attractors_per_branch,
+            max_iterations=pipeline_config.max_iterations,
+            stagnation_limit=pipeline_config.stagnation_limit,
+            output_dir=str(pipeline_config.sca_output_dir),
+            random_seed=pipeline_config.random_seed,
+        )

@@ -1,0 +1,13 @@
+{
+  "image_path": "images/ragnopiccolo.png",
+  "num_attractors": 2000,
+  "max_iterations": 800,
+  "influence_radius": 15.0,
+  "kill_distance": 2.0,
+  "growth_step": 1.0,
+  "num_branches": 7359,
+  "iterations": 348,
+  "num_seeds": 100,
+  "render_data_path": "outputs\\sca\\ragnopiccolo_render_data.json",
+  "seeds_path": "outputs\\sca\\ragnopiccolo_seeds.json"
+}
