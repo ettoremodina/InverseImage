@@ -1,7 +1,7 @@
 """
 Rendering Script
 
-Loads trained models/metadata and generates high-quality animations.
+Generates high-quality animations using Cairo-based renderers.
 Supports NCA, SCA, and combined SCA→NCA animations.
 
 Configuration is loaded from config/pipeline.json.
@@ -9,7 +9,7 @@ All paths are derived from the target image name.
 
 Modes:
     nca      - Render NCA growth animation from trained model
-    sca      - Render SCA growth animation from metadata
+    sca      - Render SCA growth animation from metadata  
     combined - Render SCA→NCA combined animation
 """
 
@@ -26,9 +26,13 @@ from sca import SCAConfig, grow_sca_with_frames, extract_seed_positions
 from rendering import (
     export_sca_data,
     export_nca_frames,
-    save_frames_as_gif,
+    load_sca_data,
+    load_nca_frames,
+    SCARenderer,
+    NCARenderer,
+    NCARenderConfig,
+    RenderConfig,
     save_frame_as_image,
-    save_combined_animation,
     render_seeds_image
 )
 
@@ -43,7 +47,7 @@ def load_nca_model(model_path: str, device: str = 'cuda'):
 
 
 def render_nca(pipeline):
-    """Render NCA growth animation from trained model."""
+    """Render high-quality NCA growth animation using Cairo."""
     print(f"Loading NCA model from {pipeline.nca_model_path}...")
     model, config = load_nca_model(str(pipeline.nca_model_path), pipeline.device)
 
@@ -52,39 +56,65 @@ def render_nca(pipeline):
     with torch.no_grad():
         frames = model.generate_frames(seed, steps=pipeline.animation_steps)
 
-    save_frames_as_gif(frames, str(pipeline.render_nca_gif_path), fps=pipeline.render_fps)
-    export_nca_frames(frames, str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz'))
+    npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
+    export_nca_frames(frames, npz_path)
 
-    print(f"Saved animation to {pipeline.render_nca_gif_path}")
+    print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
+    nca_render_config = NCARenderConfig(
+        output_width=pipeline.render_size,
+        output_height=pipeline.render_size,
+        cell_shape="circle",
+        cell_scale=1.0
+    )
+    renderer = NCARenderer(nca_render_config)
+    
+    data = load_nca_frames(npz_path)
+    output_path = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
+    renderer.render_animation(data, output_path, fps=pipeline.render_fps)
+
+    print(f"Saved animation to {output_path}")
     return frames
 
 
 def render_sca(pipeline):
-    """Render SCA growth animation."""
-    sca_config = SCAConfig.from_pipeline(pipeline)
+    """Render high-quality SCA growth animation using Cairo."""
+    if pipeline.sca_render_data_path.exists():
+        print(f"Loading SCA data from {pipeline.sca_render_data_path}...")
+        sca_data = load_sca_data(str(pipeline.sca_render_data_path))
+    else:
+        print("No SCA render data found, running SCA first...")
+        sca_config = SCAConfig.from_pipeline(pipeline)
+        tree, _ = grow_sca_with_frames(sca_config, pipeline.render_size, frame_skip=1)
+        export_sca_data(tree, str(pipeline.sca_render_data_path))
+        sca_data = load_sca_data(str(pipeline.sca_render_data_path))
 
-    print(f"Running SCA at {pipeline.render_size}x{pipeline.render_size}...")
-    tree, frames = grow_sca_with_frames(sca_config, pipeline.render_size, frame_skip=1)
-    print(f"Generated {len(frames)} frames, {len(tree.branches)} branches")
+    print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
+    sca_render_config = RenderConfig(
+        output_width=pipeline.render_size,
+        output_height=pipeline.render_size
+    )
+    renderer = SCARenderer(sca_render_config)
+    
+    output_path = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
+    renderer.render_animation(sca_data, output_path, fps=pipeline.render_fps)
+    
+    final_frame_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png')
+    renderer.save_frame(sca_data, final_frame_path)
 
-    save_frames_as_gif(frames, str(pipeline.render_sca_gif_path), fps=pipeline.render_fps)
-    save_frame_as_image(frames[-1], str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png'))
-    export_sca_data(tree, str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_render.json'))
-
-    print(f"Saved animation to {pipeline.render_sca_gif_path}")
-    return tree, frames
+    print(f"Saved animation to {output_path}")
+    return sca_data
 
 
 def render_combined(pipeline):
-    """Render combined SCA→NCA animation."""
+    """Render combined SCA→NCA animation using Cairo renderers."""
     sca_config = SCAConfig.from_pipeline(pipeline)
 
     print("1. Running SCA and collecting frames...")
     tree, sca_frames = grow_sca_with_frames(sca_config, pipeline.target_size, frame_skip=1)
     print(f"   Generated {len(sca_frames)} SCA frames")
 
-    # save_frame_as_image(sca_frames[-1], str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png'))
-    # save_frames_as_gif(sca_frames, str(pipeline.render_sca_gif_path), fps=pipeline.render_fps)
+    sca_json_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_render.json')
+    export_sca_data(tree, sca_json_path)
 
     print("2. Extracting seed positions...")
     seed_positions = extract_seed_positions(tree, pipeline.target_size, 
@@ -103,17 +133,34 @@ def render_combined(pipeline):
         nca_frames = model.generate_frames(seed, steps=pipeline.animation_steps)
     print(f"   Generated {len(nca_frames)} NCA frames")
 
-    save_frames_as_gif(nca_frames, str(pipeline.render_nca_gif_path), fps=pipeline.render_fps)
+    nca_npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
+    export_nca_frames(nca_frames, nca_npz_path)
 
-    print("5. Creating combined animation...")
-    save_combined_animation(sca_frames, nca_frames, str(pipeline.render_combined_gif_path), 
-                            fps=pipeline.render_fps)
+    print("5. Rendering SCA animation with Cairo...")
+    sca_render_config = RenderConfig(
+        output_width=pipeline.render_size,
+        output_height=pipeline.render_size
+    )
+    sca_renderer = SCARenderer(sca_render_config)
+    sca_data = load_sca_data(sca_json_path)
+    sca_output = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
+    sca_renderer.render_animation(sca_data, sca_output, fps=pipeline.render_fps)
 
-    print("6. Exporting render data...")
-    export_sca_data(tree, str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_render.json'))
-    export_nca_frames(nca_frames, str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz'))
+    print("6. Rendering NCA animation with Cairo...")
+    nca_render_config = NCARenderConfig(
+        output_width=pipeline.render_size,
+        output_height=pipeline.render_size,
+        cell_shape="circle",
+        cell_scale=1.0
+    )
+    nca_renderer = NCARenderer(nca_render_config)
+    nca_data = load_nca_frames(nca_npz_path)
+    nca_output = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
+    nca_renderer.render_animation(nca_data, nca_output, fps=pipeline.render_fps)
 
     print(f"\nRendering complete! Outputs saved to {pipeline.render_output_dir}")
+    print(f"  SCA: {sca_output}")
+    print(f"  NCA: {nca_output}")
 
 
 def main():

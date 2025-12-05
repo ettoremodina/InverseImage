@@ -1,5 +1,5 @@
 # TODO
-- animazioni: tempo fisso, dividi  a metà tra sca e nca, mantieni le branches sotto
+- animazioni: combina,  tempo fisso, dividi a metà (o percentuale) tra sca e nca, mantieni le branches sotto
 
 ## NCA
 - [ ] Create monitor function for loss visualization
