@@ -36,7 +36,12 @@ class Tree:
         self.mask = load_mask(self.config.mask_image_path)
         self.mask_width, self.mask_height = get_mask_dimensions(self.mask)
         
-        attractor_positions = sample_attractors(self.mask, self.config.num_attractors)
+        attractor_positions = sample_attractors(
+            self.mask, 
+            self.config.num_attractors,
+            method=self.config.attractor_placement,
+            image_path=self.config.mask_image_path
+        )
         self.attractors = [Attractor(pos) for pos in attractor_positions]
         
         if self.config.root_pos is None:
@@ -53,7 +58,7 @@ class Tree:
         
         print(f"Initialized Tree:")
         print(f"  Mask size: {self.mask_width}x{self.mask_height}")
-        print(f"  Attractors: {len(self.attractors)}")
+        print(f"  Attractors: {len(self.attractors)} ({self.config.attractor_placement})")
         print(f"  Root position: {root_pos}")
     
     def _is_inside_mask(self, pos: Vector2D) -> bool:
@@ -177,8 +182,8 @@ class Tree:
                 new_end = branch.end_pos + direction * self.config.growth_step
                 
                 ### note: it could be removed
-                if not self._is_inside_mask(new_end):
-                    continue
+                # if not self._is_inside_mask(new_end):
+                #     continue
                 
                 new_branch = branch.create_child(direction, self.config.growth_step)
                 new_branches.append(new_branch)

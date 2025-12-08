@@ -22,9 +22,7 @@ import numpy as np
 from config import load_config
 from nca import CAModel, Config as NCAConfig
 from nca.data import create_seed
-from sca import SCAConfig, grow_sca_with_frames, extract_seed_positions
 from rendering import (
-    export_sca_data,
     export_nca_frames,
     load_sca_data,
     load_nca_frames,
@@ -32,8 +30,7 @@ from rendering import (
     NCARenderer,
     NCARenderConfig,
     RenderConfig,
-    save_frame_as_image,
-    render_seeds_image
+    CombinedRenderer
 )
 
 
@@ -78,15 +75,14 @@ def render_nca(pipeline):
 
 def render_sca(pipeline):
     """Render high-quality SCA growth animation using Cairo."""
-    if pipeline.sca_render_data_path.exists():
-        print(f"Loading SCA data from {pipeline.sca_render_data_path}...")
-        sca_data = load_sca_data(str(pipeline.sca_render_data_path))
-    else:
-        print("No SCA render data found, running SCA first...")
-        sca_config = SCAConfig.from_pipeline(pipeline)
-        tree, _ = grow_sca_with_frames(sca_config, pipeline.render_size, frame_skip=1)
-        export_sca_data(tree, str(pipeline.sca_render_data_path))
-        sca_data = load_sca_data(str(pipeline.sca_render_data_path))
+    if not pipeline.sca_render_data_path.exists():
+        raise FileNotFoundError(
+            f"SCA render data not found at {pipeline.sca_render_data_path}. "
+            f"Please run train_sca.py first to generate the SCA data."
+        )
+    
+    print(f"Loading SCA data from {pipeline.sca_render_data_path}...")
+    sca_data = load_sca_data(str(pipeline.sca_render_data_path))
 
     print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
     sca_render_config = RenderConfig(
@@ -107,60 +103,80 @@ def render_sca(pipeline):
 
 def render_combined(pipeline):
     """Render combined SCA→NCA animation using Cairo renderers."""
-    sca_config = SCAConfig.from_pipeline(pipeline)
+    if not pipeline.sca_render_data_path.exists():
+        raise FileNotFoundError(
+            f"SCA render data not found at {pipeline.sca_render_data_path}. "
+            f"Please run train_sca.py first to generate the SCA data."
+        )
+    
+    if not pipeline.sca_seeds_path.exists():
+        raise FileNotFoundError(
+            f"SCA seed positions not found at {pipeline.sca_seeds_path}. "
+            f"Please run train_sca.py first to generate the seed positions."
+        )
 
-    print("1. Running SCA and collecting frames...")
-    tree, sca_frames = grow_sca_with_frames(sca_config, pipeline.target_size, frame_skip=1)
-    print(f"   Generated {len(sca_frames)} SCA frames")
+    print("1. Loading SCA data...")
+    sca_data = load_sca_data(str(pipeline.sca_render_data_path))
+    print(f"   Loaded {len(sca_data['branches'])} branches")
 
-    sca_json_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_render.json')
-    export_sca_data(tree, sca_json_path)
-
-    print("2. Extracting seed positions...")
-    seed_positions = extract_seed_positions(tree, pipeline.target_size, 
-                                             mode=pipeline.seed_mode, max_seeds=pipeline.max_seeds)
-    print(f"   Found {len(seed_positions)} seed positions")
-
-    seeds_img = render_seeds_image(seed_positions, pipeline.target_size, sca_frames[-1])
-    save_frame_as_image(seeds_img, str(pipeline.render_output_dir / f'{pipeline.image_name}_seeds.png'))
+    print("2. Loading seed positions...")
+    with open(pipeline.sca_seeds_path, 'r') as f:
+        seed_data = json.load(f)
+        seed_positions = seed_data['positions']
+    print(f"   Loaded {len(seed_positions)} seed positions")
 
     print(f"3. Loading NCA model from {pipeline.nca_model_path}...")
     model, nca_config = load_nca_model(str(pipeline.nca_model_path), pipeline.device)
 
-    print(f"4. Generating {pipeline.animation_steps} NCA frames...")
+    # Calculate frame counts based on configured timing
+    total_frames = int(pipeline.total_video_duration_seconds * pipeline.render_fps)
+    sca_frames = int(total_frames * pipeline.sca_percentage)
+    nca_frames = int(total_frames * pipeline.nca_percentage)
+    
+    # Ensure we generate enough NCA frames
+    nca_steps_needed = max(nca_frames, pipeline.animation_steps)
+    
+    print(f"4. Video configuration:")
+    print(f"   Total duration: {pipeline.total_video_duration_seconds}s at {pipeline.render_fps} fps")
+    print(f"   Total frames: {total_frames}")
+    print(f"   SCA phase: {sca_frames} frames ({pipeline.sca_percentage * 100:.1f}%)")
+    print(f"   NCA phase: {nca_frames} frames ({pipeline.nca_percentage * 100:.1f}%)")
+    
+    print(f"\n5. Generating {nca_steps_needed} NCA frames...")
     seed = create_seed(nca_config, positions=seed_positions)
     with torch.no_grad():
-        nca_frames = model.generate_frames(seed, steps=pipeline.animation_steps)
-    print(f"   Generated {len(nca_frames)} NCA frames")
+        nca_frames_data = model.generate_frames(seed, steps=nca_steps_needed)
+    print(f"   Generated {len(nca_frames_data)} NCA frames")
 
     nca_npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
-    export_nca_frames(nca_frames, nca_npz_path)
+    export_nca_frames(nca_frames_data, nca_npz_path)
 
-    print("5. Rendering SCA animation with Cairo...")
+    print("\n6. Rendering combined SCA→NCA animation with Cairo...")
     sca_render_config = RenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size
     )
-    sca_renderer = SCARenderer(sca_render_config)
-    sca_data = load_sca_data(sca_json_path)
-    sca_output = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
-    sca_renderer.render_animation(sca_data, sca_output, fps=pipeline.render_fps)
-
-    print("6. Rendering NCA animation with Cairo...")
     nca_render_config = NCARenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size,
         cell_shape="circle",
         cell_scale=1.0
     )
-    nca_renderer = NCARenderer(nca_render_config)
+    
+    combined_renderer = CombinedRenderer(sca_render_config, nca_render_config)
     nca_data = load_nca_frames(nca_npz_path)
-    nca_output = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
-    nca_renderer.render_animation(nca_data, nca_output, fps=pipeline.render_fps)
+    
+    combined_output = str(pipeline.render_combined_gif_path.with_suffix('.mp4'))
+    combined_renderer.render_combined_animation(
+        sca_data, 
+        nca_data, 
+        combined_output, 
+        fps=pipeline.render_fps,
+        sca_frames=sca_frames,
+        nca_frames=nca_frames
+    )
 
-    print(f"\nRendering complete! Outputs saved to {pipeline.render_output_dir}")
-    print(f"  SCA: {sca_output}")
-    print(f"  NCA: {nca_output}")
+    print(f"\nRendering complete! Output saved to {combined_output}")
 
 
 def main():
@@ -171,7 +187,7 @@ def main():
     print(f"Output: {pipeline.render_output_dir}")
     print()
     
-    mode = 'combined'
+    mode = 'sca'
     
     if pipeline.nca_model_path.exists() and pipeline.sca_metadata_path.exists():
         mode = 'combined'

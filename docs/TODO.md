@@ -1,5 +1,7 @@
 # TODO
-- animazioni: combina,  tempo fisso, dividi a metà (o percentuale) tra sca e nca, mantieni le branches sotto
+
+## STORM algorithm
+- [ ] Implement STORM algorithm, after nca to refine details
 
 ## NCA
 - [ ] Create monitor function for loss visualization

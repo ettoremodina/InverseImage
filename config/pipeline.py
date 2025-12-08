@@ -78,6 +78,7 @@ class PipelineConfig:
     
     # ==================== SCA SETTINGS ====================
     num_attractors: int = 2000
+    attractor_placement: str = 'edge'  # 'random' or 'edge'
     influence_radius: float = 15.0
     kill_distance: float = 2.0
     growth_step: float = 1.0
@@ -88,11 +89,16 @@ class PipelineConfig:
     
     # Seed extraction
     seed_mode: str = 'tips'  # 'tips' or 'all'
-    max_seeds: int = 100
+    max_seeds: int = 200
     
     # ==================== RENDERING SETTINGS ====================
     render_size: int = 256
     render_fps: int = 20
+    
+    # Combined animation settings
+    total_video_duration_seconds: float = 10.0
+    sca_percentage: float = 0.4  # 40% of video for SCA growth
+    nca_percentage: float = 0.6  # 60% of video for NCA growth
     
     # ==================== MISC ====================
     device: str = None
@@ -249,6 +255,7 @@ def save_config(config: PipelineConfig, path: str = 'config/pipeline.json'):
         'animation_steps': config.animation_steps,
         'animation_fps': config.animation_fps,
         'num_attractors': config.num_attractors,
+        'attractor_placement': config.attractor_placement,
         'influence_radius': config.influence_radius,
         'kill_distance': config.kill_distance,
         'growth_step': config.growth_step,
@@ -259,6 +266,9 @@ def save_config(config: PipelineConfig, path: str = 'config/pipeline.json'):
         'max_seeds': config.max_seeds,
         'render_size': config.render_size,
         'render_fps': config.render_fps,
+        'total_video_duration_seconds': config.total_video_duration_seconds,
+        'sca_percentage': config.sca_percentage,
+        'nca_percentage': config.nca_percentage,
         'random_seed': config.random_seed,
     }
     

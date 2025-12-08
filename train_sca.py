@@ -20,6 +20,7 @@ from pathlib import Path
 from config import load_config
 from sca import Tree, SCAConfig, visualize_tree, extract_seed_positions
 from sca.visualization import plot_growth_statistics
+from sca.mask import save_edge_visualization
 from rendering.exporters import export_sca_data
 
 
@@ -30,9 +31,13 @@ def main():
     sca_config = SCAConfig.from_pipeline(pipeline)
 
     print(f"Running SCA on {pipeline.target_image}")
-    print(f"  Attractors: {sca_config.num_attractors}")
+    print(f"  Attractors: {sca_config.num_attractors} ({sca_config.attractor_placement})")
     print(f"  Max iterations: {sca_config.max_iterations}")
     print()
+
+    if sca_config.attractor_placement == 'edge':
+        edge_path = str(pipeline.sca_output_dir / f'{pipeline.image_name}_edges.png')
+        save_edge_visualization(sca_config.mask_image_path, edge_path)
 
     tree = Tree(sca_config)
     tree.grow()
@@ -60,6 +65,7 @@ def main():
     metadata = {
         'image_path': pipeline.target_image,
         'num_attractors': sca_config.num_attractors,
+        'attractor_placement': sca_config.attractor_placement,
         'max_iterations': sca_config.max_iterations,
         'influence_radius': sca_config.influence_radius,
         'kill_distance': sca_config.kill_distance,

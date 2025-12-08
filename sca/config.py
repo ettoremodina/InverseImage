@@ -6,8 +6,11 @@ unified configuration for NCA, SCA, and rendering.
 """
 
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Literal
 import numpy as np
+
+
+AttractorPlacement = Literal['random', 'edge']
 
 
 @dataclass
@@ -15,6 +18,7 @@ class SCAConfig:
     mask_image_path: str = 'images/Brini.png'
 
     num_attractors: int = 2000
+    attractor_placement: AttractorPlacement = 'edge'
     influence_radius: float = 15.0
     kill_distance: float = 2.0
     growth_step: float = 1.0
@@ -42,6 +46,7 @@ class SCAConfig:
         return cls(
             mask_image_path=pipeline_config.target_image,
             num_attractors=pipeline_config.num_attractors,
+            attractor_placement=pipeline_config.attractor_placement,
             influence_radius=pipeline_config.influence_radius,
             kill_distance=pipeline_config.kill_distance,
             growth_step=pipeline_config.growth_step,

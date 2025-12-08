@@ -1,9 +1,9 @@
 {
-  "target_image": "images/ragnopiccolo.png",
+  "target_image": "images/Brini.png",
   "output_base": "outputs",
   
   "target_size": 128,
-  "n_epochs": 200,
+  "n_epochs": 2500,
   "batch_size": 8,
   "steps_per_epoch": 50,
   
@@ -14,13 +14,14 @@
   "lr_gamma": 0.9999,
   "use_mixed_precision": true,
   
-  "seed_positions_path": "outputs/sca/ragnopiccolo_seeds.json",
+  "seed_positions_path": "outputs/sca/Brini_seeds.json",
   "animation_steps": 100,
   "animation_fps": 20,
   
-  "num_attractors": 2000,
-  "influence_radius": 15.0,
-  "kill_distance": 2.0,
+  "num_attractors": 10000,
+  "attractor_placement": "edge",
+  "influence_radius": 50.0,
+  "kill_distance": 1.0,
   "growth_step": 1.0,
   "branch_angle_threshold": 0.1,
   "max_iterations": 800,
@@ -30,6 +31,10 @@
   
   "render_size": 512,
   "render_fps": 20,
+  
+  "total_video_duration_seconds": 10.0,
+  "sca_percentage": 0.7,
+  "nca_percentage": 0.3,
   
   "random_seed": null
 }

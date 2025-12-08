@@ -6,6 +6,7 @@ Uses Cairo for resolution-independent vector graphics.
 from .config import RenderConfig
 from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer, NCARenderConfig
+from .combined_renderer import CombinedRenderer
 from .exporters import (
     export_sca_data, 
     load_sca_data,
