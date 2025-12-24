@@ -172,7 +172,7 @@ class NCARenderer(Renderer):
         
         # Apply post-processing effects
         processed = self._apply_metaballs(raw_image)
-        processed = self._apply_fake_3d(processed)
+        # processed = self._apply_fake_3d(processed)
         
         return processed
     

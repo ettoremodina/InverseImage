@@ -3,7 +3,7 @@ Rendering module for high-resolution skinning of SCA/NCA simulations.
 Uses Cairo for resolution-independent vector graphics.
 """
 
-from config.render_config import RenderConfig, NCARenderConfig
+from config.render_config import SCARenderConfig, NCARenderConfig
 from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer
 from .combined_renderer import CombinedRenderer

@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from typing import Tuple
 
 @dataclass
-class RenderConfig:
+class SCARenderConfig:
     output_width: int = 1024
     output_height: int = 1024
     background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     
     branch_color: Tuple[float, float, float, float] = (0.35, 0.20, 0.10, 1.0)
     branch_color_end: Tuple[float, float, float, float] = (0.10, 0.60, 0.30, 1.0)
-    branch_base_width: float = 5.0
+    branch_base_width: float = 2.5
     branch_tip_width: float = 0.5
     
     sway_magnitude: float = 2.5
@@ -24,8 +24,8 @@ class RenderConfig:
 
 @dataclass
 class NCARenderConfig:
-    output_width: int = 512
-    output_height: int = 512
+    output_width: int = 1024
+    output_height: int = 1024
     background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     
     cell_shape: str = "circle"  # "circle", "square", "hexagon"

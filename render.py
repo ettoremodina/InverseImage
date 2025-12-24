@@ -38,7 +38,7 @@ from rendering import (
     SCARenderer,
     NCARenderer,
     NCARenderConfig,
-    RenderConfig,
+    SCARenderConfig,
     CombinedRenderer
 )
 
@@ -108,7 +108,7 @@ def render_sca(pipeline):
     sca_data = load_sca_data(str(pipeline.sca_render_data_path))
 
     print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
-    sca_render_config = RenderConfig(
+    sca_render_config = SCARenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size
     )
@@ -154,8 +154,8 @@ def render_particles(pipeline):
     particle_output_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_particles.mp4')
     remove_if_exists(particle_output_path)
     
-    particle_steps = int(pipeline.particle_duration_seconds * pipeline.render_fps)
-    print(f"Generating {particle_steps} particle frames ({pipeline.particle_duration_seconds}s at {pipeline.render_fps} fps)")
+    particle_steps = int(pipeline.particles.particle_duration_seconds * pipeline.render_fps)
+    print(f"Generating {particle_steps} particle frames ({pipeline.particles.particle_duration_seconds}s at {pipeline.render_fps} fps)")
     
     generate_particle_animation(
         nca_final_frame=final_nca_frame,
@@ -165,8 +165,8 @@ def render_particles(pipeline):
         height=pipeline.render_size,
         output_path=particle_output_path,
         fps=pipeline.render_fps,
-        num_particles=pipeline.particle_count,
-        speed=pipeline.particle_speed,
+        num_particles=pipeline.particles.particle_count,
+        speed=pipeline.particles.particle_speed,
         device=pipeline.device
     )
     
@@ -257,7 +257,7 @@ def render_combined(pipeline):
 
     # 5. Render Combined SCA -> NCA Video
     print("\n6. Rendering combined SCA→NCA animation...")
-    sca_render_config = RenderConfig(
+    sca_render_config = SCARenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size
     )

@@ -6,11 +6,11 @@ import cairo
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Union, Any
-from config.render_config import RenderConfig, NCARenderConfig
+from config.render_config import SCARenderConfig, NCARenderConfig
 
 
 class Renderer(ABC):
-    def __init__(self, config: Union[RenderConfig, NCARenderConfig]):
+    def __init__(self, config: Union[SCARenderConfig, NCARenderConfig]):
         self.config = config
     
     def _create_surface(self) -> Tuple[cairo.ImageSurface, cairo.Context]:
@@ -21,7 +21,7 @@ class Renderer(ABC):
         )
         ctx = cairo.Context(surface)
         
-        # Check if antialiasing is in config (both RenderConfig and NCARenderConfig have it now)
+        # Check if antialiasing is in config (both SCARenderConfig and NCARenderConfig have it now)
         if getattr(self.config, 'antialiasing', True):
             ctx.set_antialias(cairo.ANTIALIAS_BEST)
         

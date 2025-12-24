@@ -15,7 +15,7 @@ from tqdm import tqdm
 from typing import Dict, Any, Tuple, List
 from pathlib import Path
 
-from config.render_config import RenderConfig, NCARenderConfig
+from config.render_config import SCARenderConfig, NCARenderConfig
 from .base import Renderer
 from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer
@@ -28,8 +28,8 @@ def render_combined_frame_wrapper(args):
 
 
 class CombinedRenderer(Renderer):
-    def __init__(self, render_config: RenderConfig = None, nca_config: NCARenderConfig = None):
-        super().__init__(render_config or RenderConfig())
+    def __init__(self, render_config: SCARenderConfig = None, nca_config: NCARenderConfig = None):
+        super().__init__(render_config or SCARenderConfig())
         self.nca_config = nca_config or NCARenderConfig()
         
         # Force NCA renderer to be transparent for compositing

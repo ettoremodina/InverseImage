@@ -57,8 +57,8 @@ def main():
     # 3. Run Particles
     output_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_particles_standalone.mp4')
     
-    particle_steps = int(pipeline.particle_duration_seconds * pipeline.render_fps)
-    print(f"Generating {particle_steps} particle frames ({pipeline.particle_duration_seconds}s at {pipeline.render_fps} fps)")
+    particle_steps = int(pipeline.particles.particle_duration_seconds * pipeline.render_fps)
+    print(f"Generating {particle_steps} particle frames ({pipeline.particles.particle_duration_seconds}s at {pipeline.render_fps} fps)")
     
     generate_particle_animation(
         nca_final_frame=final_nca_frame,
@@ -68,10 +68,10 @@ def main():
         height=pipeline.render_size,
         output_path=output_path,
         fps=pipeline.render_fps,
-        num_particles=pipeline.particle_count,
-        speed=pipeline.particle_speed,
-        trail_fade=pipeline.particle_trail_fade,
-        stretch_factor=pipeline.particle_stretch_factor
+        num_particles=pipeline.particles.particle_count,
+        speed=pipeline.particles.particle_speed,
+        trail_fade=pipeline.particles.particle_trail_fade,
+        stretch_factor=pipeline.particles.particle_stretch_factor
     )
 
 if __name__ == '__main__':

@@ -14,7 +14,7 @@ import numpy as np
 from .common import ResolutionStage, get_device
 from .nca_config import NCAConfig
 from .sca_config import SCAConfig
-from .render_config import RenderConfig, NCARenderConfig
+from .render_config import SCARenderConfig, NCARenderConfig
 from .particle_config import ParticleConfig
 
 @dataclass
@@ -31,13 +31,13 @@ class PipelineConfig:
     # ==================== SUB-CONFIGS ====================
     nca: NCAConfig = field(default_factory=NCAConfig)
     sca: SCAConfig = field(default_factory=SCAConfig)
-    render: RenderConfig = field(default_factory=RenderConfig)
+    sca_render: SCARenderConfig = field(default_factory=SCARenderConfig)
     nca_render: NCARenderConfig = field(default_factory=NCARenderConfig)
     particles: ParticleConfig = field(default_factory=ParticleConfig)
     
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
-    seed_positions_path: Optional[str] = None
+    seed_positions_path: Optional[str] = "outputs/sca/Brini_seeds.json"
     
     # Combined animation settings
     total_video_duration_seconds: float = 10.0
@@ -47,7 +47,7 @@ class PipelineConfig:
     # Animation
     animation_steps: int = 100
     animation_fps: int = 20
-    render_size: int = 256
+    render_size: int = 1024
     render_fps: int = 20
     
     # ==================== MISC ====================
@@ -184,26 +184,9 @@ class PipelineConfig:
 def load_config(path: str = 'config/pipeline.json') -> PipelineConfig:
     """
     Load config. 
-    Since we removed JSON support, this now returns a default configuration 
-    or loads from a python file if we implemented that.
-    For now, it returns the default configuration which matches the previous JSON values.
+    Returns the default configuration.
     """
-    # TODO: Implement loading from a python file if needed for different experiments.
-    # For now, we hardcode the default configuration which matches 'Brini'.
-    
-    config = PipelineConfig()
-    
-    # Override defaults if needed to match the previous JSON
-    config.seed_positions_path = "outputs/sca/Brini_seeds.json"
-    config.sca.num_attractors = 10000
-    config.sca.influence_radius = 50.0
-    config.sca.kill_distance = 1.0
-    config.sca.max_seeds = 1000
-    config.sca.seed_mode = "tips"
-    
-    config.nca.lr = 0.002
-    
-    return config
+    return PipelineConfig()
 
 
 def save_config(config: PipelineConfig, path: str = 'config/pipeline.json'):

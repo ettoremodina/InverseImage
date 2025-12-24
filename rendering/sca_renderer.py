@@ -12,7 +12,7 @@ from tqdm import tqdm
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
-from config.render_config import RenderConfig
+from config.render_config import SCARenderConfig
 from .base import Renderer
 
 
@@ -23,8 +23,8 @@ def render_sca_frame_wrapper(args):
 
 
 class SCARenderer(Renderer):
-    def __init__(self, config: RenderConfig = None):
-        super().__init__(config or RenderConfig())
+    def __init__(self, config: SCARenderConfig = None):
+        super().__init__(config or SCARenderConfig())
     
     def _draw_branches(self, ctx: cairo.Context, branches: List[Dict], 
                        scale_x: float, scale_y: float, max_depth: int, 

@@ -12,10 +12,10 @@ AttractorPlacement = Literal['random', 'edge']
 class SCAConfig:
     mask_image_path: str = 'images/Brini.png'
 
-    num_attractors: int = 2000
+    num_attractors: int = 10000
     attractor_placement: AttractorPlacement = 'edge'
-    influence_radius: float = 15.0
-    kill_distance: float = 2.0
+    influence_radius: float = 50.0
+    kill_distance: float = 1.0
     growth_step: float = 1.0
 
     branch_angle_threshold: float = 0.1
@@ -24,6 +24,10 @@ class SCAConfig:
     root_pos: Optional[Tuple[float, float]] = None
     max_iterations: int = 800
     stagnation_limit: int = 100
+    
+    # Seed extraction
+    seed_mode: str = 'tips'  # 'tips' or 'all'
+    max_seeds: int = 1000
 
     animate: bool = False
     show_attractors: bool = True
