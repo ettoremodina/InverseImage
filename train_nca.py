@@ -21,6 +21,7 @@ from config import load_config
 from nca import Config, CAModel, create_seed
 from nca.training import Trainer
 from nca.visualization import save_animation, plot_training_loss
+from rendering import export_nca_frames
 
 
 def train_progressive(nca_config: Config, output_dir: Path, model_path: Path):
@@ -97,6 +98,11 @@ def main():
     seed = create_seed(nca_config, positions=nca_config.seed_positions)
     frames = model.generate_frames(seed, pipeline.animation_steps)
     save_animation(frames, str(pipeline.nca_animation_path))
+    
+    # Export frames for particle refinement
+    npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
+    export_nca_frames(frames, npz_path)
+    print(f"Saved NCA frames to {npz_path}")
 
     print("\nTraining complete!")
     print(f"  Model: {pipeline.nca_model_path}")

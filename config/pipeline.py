@@ -100,6 +100,13 @@ class PipelineConfig:
     sca_percentage: float = 0.4  # 40% of video for SCA growth
     nca_percentage: float = 0.6  # 60% of video for NCA growth
     
+    # ==================== PARTICLE SETTINGS ====================
+    particle_count: int = 5000
+    particle_speed: float = 8
+    particle_duration_seconds: float = 5.0
+    particle_trail_fade: float = 0.92
+    particle_stretch_factor: float = 2.0
+    
     # ==================== MISC ====================
     device: str = None
     log_interval: int = 100
@@ -269,6 +276,11 @@ def save_config(config: PipelineConfig, path: str = 'config/pipeline.json'):
         'total_video_duration_seconds': config.total_video_duration_seconds,
         'sca_percentage': config.sca_percentage,
         'nca_percentage': config.nca_percentage,
+        'particle_count': config.particle_count,
+        'particle_speed': config.particle_speed,
+        'particle_duration_seconds': config.particle_duration_seconds,
+        'particle_trail_fade': config.particle_trail_fade,
+        'particle_stretch_factor': config.particle_stretch_factor,
         'random_seed': config.random_seed,
     }
     

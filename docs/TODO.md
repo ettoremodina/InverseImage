@@ -1,5 +1,10 @@
 # TODO
-- Persistence and morphing for nca
+- rendering is slow
+- improve particles post rendering (starting frame too)
+- add some text, titles, credits to the video
+- use logging
+- move all configs to one place
+- morphing for nca
 
 ## RD algorithm
 
