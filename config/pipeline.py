@@ -25,7 +25,7 @@ class PipelineConfig:
     """
     
     # ==================== MAIN SETTING ====================
-    target_image: str = 'images/Brini.png'
+    target_image: str = 'images/Vale_Ettore.png'
     output_base: str = 'outputs'
     
     # ==================== SUB-CONFIGS ====================
@@ -37,7 +37,7 @@ class PipelineConfig:
     
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
-    seed_positions_path: Optional[str] = "outputs/sca/Brini_seeds.json"
+    seed_positions_path: Optional[str] = "outputs/sca/Vale_Ettore_seeds.json"
     
     # Combined animation settings
     total_video_duration_seconds: float = 10.0

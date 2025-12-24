@@ -61,7 +61,9 @@ class CombinedRenderer(Renderer):
         
         # Draw NCA cells if provided
         if nca_frame is not None:
-            nca_image = self.nca_renderer.render_frame(nca_frame, sca_data['source_width'], sca_data['source_height'])
+            # Use actual frame dimensions to ensure correct scaling
+            h, w = nca_frame.shape[:2]
+            nca_image = self.nca_renderer.render_frame(nca_frame, w, h)
             return self._composite(sca_image, nca_image)
             
         return sca_image

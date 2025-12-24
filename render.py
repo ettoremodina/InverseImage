@@ -125,7 +125,7 @@ def render_sca(pipeline):
     return sca_data
 
 
-def render_particles(pipeline):
+def render_particles(pipeline, background_image=None):
     """Render particle refinement animation based on the last NCA frame."""
     nca_npz_path = pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz'
     
@@ -170,7 +170,8 @@ def render_particles(pipeline):
         trail_fade=pipeline.particles.particle_trail_fade,
         stretch_factor=pipeline.particles.particle_stretch_factor,
         radius=pipeline.particles.particle_radius,
-        device=pipeline.device
+        device=pipeline.device,
+        background_image=background_image
     )
     
     return particle_output_path
@@ -285,12 +286,24 @@ def render_combined(pipeline):
         nca_frames=nca_frames
     )
 
-    # 6. Render Particles
-    print("\n7. Running Particle Refinement...")
-    particle_output = render_particles(pipeline)
+    # 6. Get Final Frame for Particles Background
+    print("\n7. Generating background for particles...")
+    # Render the very last frame of the combined animation to use as background
+    # This ensures the SCA tree and NCA growth persist
+    final_nca_frame = nca_data['frames'][-1]
+    final_combined_frame = combined_renderer.render_frame(
+        sca_data, 
+        nca_frame=final_nca_frame, 
+        max_depth_limit=None, 
+        time=(sca_frames + nca_frames) / pipeline.render_fps
+    )
+    
+    # 7. Render Particles
+    print("\n8. Running Particle Refinement...")
+    particle_output = render_particles(pipeline, background_image=final_combined_frame)
 
-    # 7. Merge Videos
-    print("\n8. Merging videos...")
+    # 8. Merge Videos
+    print("\n9. Merging videos...")
     final_video_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_full_pipeline.mp4')
     merge_videos(pipeline, [combined_output, particle_output], final_video_path)
 

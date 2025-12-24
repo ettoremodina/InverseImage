@@ -15,7 +15,7 @@ class ParticleRefiner:
     Refines a low-res NCA image using particle advection.
     Flow is derived from NCA (structure), Color is derived from Target Image (detail).
     """
-    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, spawn_duration=0, device='cuda'):
+    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, spawn_duration=0, device='cuda', background_image=None):
         """
         Args:
             nca_image: Numpy array (H, W, C) float32 [0, 1]. Source of flow field.
@@ -28,6 +28,7 @@ class ParticleRefiner:
             stretch_factor: How much to stretch particles based on velocity.
             radius: Radius of the particle head.
             spawn_duration: Number of frames over which to spawn particles. 0 = all at once.
+            background_image: Optional numpy array (H, W, C) to use as initial canvas.
         """
         self.width = width
         self.height = height
@@ -155,33 +156,57 @@ class ParticleRefiner:
             self.py = new_y
         
         # 5. Initialize Canvas (Background)
-        # We start with the upscaled NCA image so particles draw ON TOP of it.
-        # We need to ensure channel consistency with target_image.
-        
-        # Check channels of upscaled NCA image (self.field_image)
-        nca_channels = self.field_image.shape[2] if len(self.field_image.shape) > 2 else 1
-        
-        if self.channels == 3 and nca_channels == 4:
-            # Convert RGBA to RGB with WHITE background blending
-            # Extract alpha channel
-            alpha = self.field_image[:, :, 3]
-            rgb = self.field_image[:, :, :3]
+        if background_image is not None:
+            # Use provided background image
+            bg = cv2.resize(background_image, (width, height), interpolation=cv2.INTER_AREA)
+            if bg.dtype == np.uint8:
+                bg = bg.astype(np.float32) / 255.0
             
-            # Create white background
-            white_bg = np.ones_like(rgb)
+            # Ensure channels match target_image (self.channels)
+            bg_channels = bg.shape[2] if len(bg.shape) > 2 else 1
             
-            # Blend: alpha * rgb + (1 - alpha) * white
-            # Ensure alpha is broadcastable
-            alpha = alpha[:, :, np.newaxis]
-            
-            self.canvas = alpha * rgb + (1 - alpha) * white_bg
-            
-        elif self.channels == 1 and nca_channels > 1:
-             self.canvas = cv2.cvtColor(self.field_image, cv2.COLOR_RGBA2GRAY)
-        elif self.channels == 3 and nca_channels == 1:
-             self.canvas = cv2.cvtColor(self.field_image, cv2.COLOR_GRAY2RGB)
+            if self.channels == 3 and bg_channels == 4:
+                # Blend with white if background has alpha
+                alpha = bg[:, :, 3:4]
+                rgb = bg[:, :, :3]
+                white_bg = np.ones_like(rgb)
+                self.canvas = alpha * rgb + (1 - alpha) * white_bg
+            elif self.channels == 3 and bg_channels == 1:
+                self.canvas = cv2.cvtColor(bg, cv2.COLOR_GRAY2RGB)
+            elif self.channels == 1 and bg_channels > 1:
+                if bg_channels == 4:
+                    bg = cv2.cvtColor(bg, cv2.COLOR_RGBA2RGB)
+                self.canvas = cv2.cvtColor(bg, cv2.COLOR_RGB2GRAY)
+            else:
+                self.canvas = bg.copy()
         else:
-            self.canvas = self.field_image.copy()
+            # We start with the upscaled NCA image so particles draw ON TOP of it.
+            # We need to ensure channel consistency with target_image.
+            
+            # Check channels of upscaled NCA image (self.field_image)
+            nca_channels = self.field_image.shape[2] if len(self.field_image.shape) > 2 else 1
+            
+            if self.channels == 3 and nca_channels == 4:
+                # Convert RGBA to RGB with WHITE background blending
+                # Extract alpha channel
+                alpha = self.field_image[:, :, 3]
+                rgb = self.field_image[:, :, :3]
+                
+                # Create white background
+                white_bg = np.ones_like(rgb)
+                
+                # Blend: alpha * rgb + (1 - alpha) * white
+                # Ensure alpha is broadcastable
+                alpha = alpha[:, :, np.newaxis]
+                
+                self.canvas = alpha * rgb + (1 - alpha) * white_bg
+                
+            elif self.channels == 1 and nca_channels > 1:
+                 self.canvas = cv2.cvtColor(self.field_image, cv2.COLOR_RGBA2GRAY)
+            elif self.channels == 3 and nca_channels == 1:
+                 self.canvas = cv2.cvtColor(self.field_image, cv2.COLOR_GRAY2RGB)
+            else:
+                self.canvas = self.field_image.copy()
             
         # Ensure canvas is float32
         if self.canvas.dtype != np.float32:
@@ -364,7 +389,7 @@ class ParticleRefiner:
             
         return frame
 
-def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, device='cuda'):
+def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, device='cuda', background_image=None):
     """Main driver to generate and save the particle animation."""
     print(f"Initializing Particle Refiner ({width}x{height}) on {device}...")
     
@@ -383,7 +408,7 @@ def generate_particle_animation(nca_final_frame, target_image, steps, width, hei
     # Spawn particles over the first 50% of the animation
     spawn_duration = int(steps * 0.5)
     
-    refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor, radius=radius, spawn_duration=spawn_duration, device=device)
+    refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor, radius=radius, spawn_duration=spawn_duration, device=device, background_image=background_image)
     
     # Setup video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')

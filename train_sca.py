@@ -56,9 +56,9 @@ def main():
     print(f"Exported render data to: {pipeline.sca_render_data_path}")
 
     seed_positions = extract_seed_positions(
-        tree, pipeline.target_size, 
-        mode=pipeline.seed_mode, 
-        max_seeds=pipeline.max_seeds
+        tree, pipeline.nca.target_size, 
+        mode=pipeline.sca.seed_mode, 
+        max_seeds=pipeline.sca.max_seeds
     )
     pipeline.save_seed_positions(seed_positions)
 
