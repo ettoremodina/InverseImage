@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 import torch
 
-from .config import Config
+from config.nca_config import NCAConfig as Config
 
 
 def prepare_image(path, size):

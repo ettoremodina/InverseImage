@@ -1,15 +1,14 @@
 # TODO
 - rendering is slow
 - improve particles post rendering (starting frame too)
+- move all configs to one place
+
 - add some text, titles, credits to the video
 - use logging
-- move all configs to one place
+  
 - morphing for nca
 
 ## RD algorithm
-
-## STORM algorithm
-- [ ] Implement STORM algorithm, after nca to refine details
 
 ## NCA
 - [ ] Create monitor function for loss visualization

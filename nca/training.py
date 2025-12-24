@@ -18,7 +18,8 @@ import torch.optim as optim
 from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 
-from .config import Config, ResolutionStage
+from config.nca_config import NCAConfig as Config
+from config.common import ResolutionStage
 from .model import CAModel
 from .data import load_image, create_seed
 from .visualization import save_animation

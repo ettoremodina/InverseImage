@@ -4,7 +4,7 @@
   "channel_n": 16,
   "hidden_size": 128,
   "progressive": false,
-  "final_loss": 0.07402592897415161,
+  "final_loss": 0.010749639943242073,
   "model_path": "outputs\\nca\\Brini_model.pt",
   "seed_positions": [
     [

@@ -18,10 +18,11 @@ import json
 from pathlib import Path
 
 from config import load_config
-from nca import Config, CAModel, create_seed
+from nca import CAModel, create_seed
 from nca.training import Trainer
 from nca.visualization import save_animation, plot_training_loss
 from rendering import export_nca_frames
+from config.nca_config import NCAConfig as Config
 
 
 def train_progressive(nca_config: Config, output_dir: Path, model_path: Path):
@@ -59,7 +60,12 @@ def main():
     pipeline = load_config()
     pipeline.create_output_dirs()
     
-    nca_config = Config.from_pipeline(pipeline)
+    nca_config = pipeline.nca
+    # Load seed positions if available
+    seed_positions = pipeline.load_seed_positions()
+    if seed_positions:
+        nca_config.seed_positions = seed_positions
+
     use_progressive = len(nca_config.progressive_stages) > 1
 
     print(f"Training NCA on {pipeline.target_image}")

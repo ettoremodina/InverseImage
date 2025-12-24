@@ -9,12 +9,19 @@ import cairo
 import numpy as np
 import imageio
 import cv2
+import multiprocessing
 from tqdm import tqdm
 from typing import Dict, Any, Tuple
 from pathlib import Path
 
-from .config import NCARenderConfig
+from config.render_config import NCARenderConfig
 from .base import Renderer
+
+
+def render_nca_frame_wrapper(args):
+    config, frame, source_w, source_h = args
+    renderer = NCARenderer(config)
+    return renderer.render_frame(frame, source_w, source_h)
 
 
 class NCARenderer(Renderer):
@@ -185,13 +192,13 @@ class NCARenderer(Renderer):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         
         rendered_frames = []
-        accumulated_frame = None
         
-        for frame in tqdm(frames_data, desc="Rendering NCA frames"):
-            rendered = self.render_frame(frame, source_w, source_h)
-            
-            # Temporal smoothing
-            if self.config.temporal_smoothing > 0:
+        if self.config.temporal_smoothing > 0:
+            accumulated_frame = None
+            for frame in tqdm(frames_data, desc="Rendering NCA frames"):
+                rendered = self.render_frame(frame, source_w, source_h)
+                
+                # Temporal smoothing
                 rendered_float = rendered.astype(np.float32)
                 
                 if accumulated_frame is None:
@@ -203,10 +210,16 @@ class NCARenderer(Renderer):
                     accumulated_frame = accumulated_frame * (1.0 - alpha) + rendered_float * alpha
                 
                 final_frame = accumulated_frame.astype(np.uint8)
-            else:
-                final_frame = rendered
-                
-            rendered_frames.append(final_frame)
+                rendered_frames.append(final_frame)
+        else:
+            # Parallel rendering
+            num_cores = max(1, multiprocessing.cpu_count() - 1) # Leave one core free
+            print(f"Rendering with {num_cores} cores...")
+            
+            task_args = [(self.config, frame, source_w, source_h) for frame in frames_data]
+            
+            with multiprocessing.Pool(processes=num_cores) as pool:
+                rendered_frames = list(tqdm(pool.imap(render_nca_frame_wrapper, task_args), total=len(frames_data), desc="Rendering NCA frames (Parallel)"))
         
         imageio.mimsave(output_path, rendered_frames, fps=fps)
         print(f"Saved animation: {output_path}")

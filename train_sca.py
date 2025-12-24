@@ -28,7 +28,7 @@ def main():
     pipeline = load_config()
     pipeline.create_output_dirs()
     
-    sca_config = SCAConfig.from_pipeline(pipeline)
+    sca_config = pipeline.sca
 
     print(f"Running SCA on {pipeline.target_image}")
     print(f"  Attractors: {sca_config.num_attractors} ({sca_config.attractor_placement})")

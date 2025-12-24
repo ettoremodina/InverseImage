@@ -5,7 +5,7 @@ Skeleton/seed extraction from SCA trees for NCA initialization.
 import numpy as np
 
 from .tree import Tree
-from .config import SCAConfig
+from config.sca_config import SCAConfig
 
 
 def extract_seed_positions(tree: Tree, target_size: int, mode: str = 'tips', max_seeds: int = 50):

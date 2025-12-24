@@ -9,7 +9,7 @@ Branching occurs naturally when different tips are claimed by different attracto
 from typing import List, Dict, Optional, Callable, Set
 import numpy as np
 
-from .config import SCAConfig
+from config.sca_config import SCAConfig
 from .vector import Vector2D
 from .attractor import Attractor
 from .branch import Branch

@@ -11,7 +11,7 @@ from pathlib import Path
 import imageio
 
 from .tree import Tree
-from .config import SCAConfig
+from config.sca_config import SCAConfig
 
 
 def visualize_tree(

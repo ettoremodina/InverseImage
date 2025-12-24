@@ -7,12 +7,19 @@ import cairo
 import numpy as np
 import imageio
 import math
+import multiprocessing
 from tqdm import tqdm
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
-from .config import RenderConfig
+from config.render_config import RenderConfig
 from .base import Renderer
+
+
+def render_sca_frame_wrapper(args):
+    config, data, max_depth_limit, time = args
+    renderer = SCARenderer(config)
+    return renderer.render_frame(data, max_depth_limit=max_depth_limit, time=time)
 
 
 class SCARenderer(Renderer):
@@ -158,15 +165,24 @@ class SCARenderer(Renderer):
         frames = []
         depths_to_render = list(range(0, max_depth + 1, frame_skip))
         
+        # Prepare tasks
+        tasks = []
         time = 0.0
         dt = 1.0 / fps
         
-        for depth in tqdm(depths_to_render, desc="Rendering frames"):
-            frame = self.render_frame(data, max_depth_limit=depth, time=time)
-            frames.append(frame)
+        for depth in depths_to_render:
+            tasks.append((self.config, data, depth, time))
             time += dt
         
-        frames.append(self.render_frame(data, time=time))
+        # Add final frame
+        tasks.append((self.config, data, None, time))
+        
+        # Parallel rendering
+        num_cores = max(1, multiprocessing.cpu_count() - 1)
+        print(f"Rendering with {num_cores} cores...")
+        
+        with multiprocessing.Pool(processes=num_cores) as pool:
+            frames = list(tqdm(pool.imap(render_sca_frame_wrapper, tasks), total=len(tasks), desc="Rendering SCA frames (Parallel)"))
         
         imageio.mimsave(output_path, frames, fps=fps)
         print(f"  Saved animation: {output_path}")

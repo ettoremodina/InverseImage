@@ -19,6 +19,10 @@ import json
 import sys
 from pathlib import Path
 
+# Patch for backward compatibility with pickled models
+import config.nca_config
+sys.modules['nca.config'] = config.nca_config
+
 import cv2
 import numpy as np
 import torch
@@ -38,6 +42,18 @@ from rendering import (
     CombinedRenderer
 )
 
+
+import os
+
+def remove_if_exists(path: str):
+    """Remove file if it exists to ensure fresh write."""
+    p = Path(path)
+    if p.exists():
+        try:
+            os.remove(p)
+            print(f"Removed existing file: {path}")
+        except OSError as e:
+            print(f"Error removing {path}: {e}")
 
 def load_nca_model(model_path: str, device: str = 'cuda'):
     """Load the trained NCA model."""
@@ -73,6 +89,7 @@ def render_nca(pipeline):
     
     data = load_nca_frames(npz_path)
     output_path = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
+    remove_if_exists(output_path)
     renderer.render_animation(data, output_path, fps=pipeline.render_fps)
 
     print(f"Saved animation to {output_path}")
@@ -98,6 +115,7 @@ def render_sca(pipeline):
     renderer = SCARenderer(sca_render_config)
     
     output_path = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
+    remove_if_exists(output_path)
     renderer.render_animation(sca_data, output_path, fps=pipeline.render_fps)
     
     final_frame_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png')
@@ -121,7 +139,7 @@ def render_particles(pipeline):
     nca_data = load_nca_frames(str(nca_npz_path))
     
     # nca_data is expected to be the frames array
-    final_nca_frame = nca_data[-1]
+    final_nca_frame = nca_data['frames'][-1]
 
     # Load Target Image for color sampling
     target_image_path = str(pipeline.target_image)
@@ -134,6 +152,7 @@ def render_particles(pipeline):
     target_img = cv2.cvtColor(target_img, cv2.COLOR_BGR2RGB)
     
     particle_output_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_particles.mp4')
+    remove_if_exists(particle_output_path)
     
     particle_steps = int(pipeline.particle_duration_seconds * pipeline.render_fps)
     print(f"Generating {particle_steps} particle frames ({pipeline.particle_duration_seconds}s at {pipeline.render_fps} fps)")
@@ -147,7 +166,8 @@ def render_particles(pipeline):
         output_path=particle_output_path,
         fps=pipeline.render_fps,
         num_particles=pipeline.particle_count,
-        speed=pipeline.particle_speed
+        speed=pipeline.particle_speed,
+        device=pipeline.device
     )
     
     return particle_output_path
@@ -169,6 +189,7 @@ def merge_videos(pipeline, video_paths: list, output_path: str):
         height = int(caps[0].get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = caps[0].get(cv2.CAP_PROP_FPS)
         
+        remove_if_exists(output_path)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
@@ -251,6 +272,7 @@ def render_combined(pipeline):
     nca_data = load_nca_frames(nca_npz_path)
     
     combined_output = str(pipeline.render_combined_gif_path.with_suffix('.mp4'))
+    remove_if_exists(combined_output)
     combined_renderer.render_animation(
         sca_data, 
         nca_data, 

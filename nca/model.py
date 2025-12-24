@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from .utils import create_filters, perchannel_conv, alive_mask
-from .config import Config
+from config.nca_config import NCAConfig as Config
 
 
 class CAModel(nn.Module):

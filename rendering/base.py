@@ -6,7 +6,7 @@ import cairo
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Union, Any
-from .config import RenderConfig, NCARenderConfig
+from config.render_config import RenderConfig, NCARenderConfig
 
 
 class Renderer(ABC):

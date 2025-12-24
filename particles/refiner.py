@@ -15,7 +15,7 @@ class ParticleRefiner:
     Refines a low-res NCA image using particle advection.
     Flow is derived from NCA (structure), Color is derived from Target Image (detail).
     """
-    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0):
+    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, device='cuda'):
         """
         Args:
             nca_image: Numpy array (H, W, C) float32 [0, 1]. Source of flow field.
@@ -33,6 +33,7 @@ class ParticleRefiner:
         self.speed = speed
         self.trail_fade = trail_fade
         self.stretch_factor = stretch_factor
+        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
         # 1. Prepare Flow Source (NCA)
         # Resize to target resolution for smooth gradients
@@ -84,17 +85,23 @@ class ParticleRefiner:
         self.flow_x /= magnitude
         self.flow_y /= magnitude
         
+        # Move maps to GPU
+        self.flow_x = torch.from_numpy(self.flow_x.astype(np.float32)).to(self.device)
+        self.flow_y = torch.from_numpy(self.flow_y.astype(np.float32)).to(self.device)
+        self.speed_map = torch.from_numpy(self.speed_map.astype(np.float32)).to(self.device)
+        self.target_image = torch.from_numpy(self.target_image.astype(np.float32)).to(self.device)
+
         # 4. Initialize Particles
         # Random positions
-        self.px = np.random.rand(num_particles) * width
-        self.py = np.random.rand(num_particles) * height
+        self.px = torch.rand(num_particles, device=self.device) * width
+        self.py = torch.rand(num_particles, device=self.device) * height
         
         # Initialize velocities
-        self.vx = np.zeros(num_particles)
-        self.vy = np.zeros(num_particles)
+        self.vx = torch.zeros(num_particles, device=self.device)
+        self.vy = torch.zeros(num_particles, device=self.device)
         
         # Random lifetimes for fading in/out
-        self.ages = np.random.rand(num_particles) * 100
+        self.ages = torch.rand(num_particles, device=self.device) * 100
         
         # 5. Initialize Canvas (Background)
         # We start with the upscaled NCA image so particles draw ON TOP of it.
@@ -128,19 +135,21 @@ class ParticleRefiner:
         # Ensure canvas is float32
         if self.canvas.dtype != np.float32:
             self.canvas = self.canvas.astype(np.float32)
+            
+        self.canvas = torch.from_numpy(self.canvas).to(self.device)
         
     def get_colors_at_positions(self, x, y):
         """Sample colors from the TARGET image at particle positions."""
         # Clip coordinates
-        xi = np.clip(x.astype(int), 0, self.width - 1)
-        yi = np.clip(y.astype(int), 0, self.height - 1)
+        xi = torch.clamp(x.long(), 0, self.width - 1)
+        yi = torch.clamp(y.long(), 0, self.height - 1)
         return self.target_image[yi, xi]
 
     def step(self):
         """Update particle positions based on flow field."""
         # 1. Sample flow at current positions
-        xi = np.clip(self.px.astype(int), 0, self.width - 1)
-        yi = np.clip(self.py.astype(int), 0, self.height - 1)
+        xi = torch.clamp(self.px.long(), 0, self.width - 1)
+        yi = torch.clamp(self.py.long(), 0, self.height - 1)
         
         # Variable speed based on gradient magnitude
         # Particles move faster in high-gradient areas (strong edges)
@@ -163,8 +172,10 @@ class ParticleRefiner:
         mask = (self.px < 0) | (self.px >= self.width) | (self.py < 0) | (self.py >= self.height)
         
         # Respawn out of bounds particles
-        self.px[mask] = np.random.rand(np.sum(mask)) * self.width
-        self.py[mask] = np.random.rand(np.sum(mask)) * self.height
+        num_respawn = mask.sum()
+        if num_respawn > 0:
+            self.px[mask] = torch.rand(num_respawn, device=self.device) * self.width
+            self.py[mask] = torch.rand(num_respawn, device=self.device) * self.height
         
         self.ages += 1.0
 
@@ -178,13 +189,13 @@ class ParticleRefiner:
         # Vectorized drawing with stretch
         # Draw multiple points along the velocity vector to simulate a streak
         num_samples = 5
-        t = np.linspace(0, 1, num_samples)
+        t = torch.linspace(0, 1, num_samples, device=self.device)
         
         # Expand dims for broadcasting: (N, 1)
-        px_exp = self.px[:, np.newaxis]
-        py_exp = self.py[:, np.newaxis]
-        vx_exp = self.vx[:, np.newaxis]
-        vy_exp = self.vy[:, np.newaxis]
+        px_exp = self.px.unsqueeze(1)
+        py_exp = self.py.unsqueeze(1)
+        vx_exp = self.vx.unsqueeze(1)
+        vy_exp = self.vy.unsqueeze(1)
         
         # Calculate sample points: (N, num_samples)
         # Draw backwards from current position to create a tail
@@ -196,8 +207,8 @@ class ParticleRefiner:
         ys = ys.flatten()
         
         # Clip coordinates
-        xi = np.clip(xs.astype(int), 0, self.width - 1)
-        yi = np.clip(ys.astype(int), 0, self.height - 1)
+        xi = torch.clamp(xs.long(), 0, self.width - 1)
+        yi = torch.clamp(ys.long(), 0, self.height - 1)
         
         # Get colors at these positions
         colors = self.get_colors_at_positions(xs, ys)
@@ -207,11 +218,11 @@ class ParticleRefiner:
         # Last one wins with this method.
         self.canvas[yi, xi] = colors
         
-        return (self.canvas * 255).astype(np.uint8)
+        return (self.canvas * 255).byte().cpu().numpy()
 
-def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0):
+def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, device='cuda'):
     """Main driver to generate and save the particle animation."""
-    print(f"Initializing Particle Refiner ({width}x{height})...")
+    print(f"Initializing Particle Refiner ({width}x{height}) on {device}...")
     
     # Ensure nca_frame is numpy
     if isinstance(nca_final_frame, torch.Tensor):
@@ -225,7 +236,7 @@ def generate_particle_animation(nca_final_frame, target_image, steps, width, hei
     if nca_final_frame.shape[0] in [3, 4]:
         nca_final_frame = np.transpose(nca_final_frame, (1, 2, 0))
         
-    refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor)
+    refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor, device=device)
     
     # Setup video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
