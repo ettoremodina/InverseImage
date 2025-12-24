@@ -1,4 +1,8 @@
 # TODO
+- improve speed of rendering
+- Persistence and morphing for nca
+
+## RD algorithm
 
 ## STORM algorithm
 - [ ] Implement STORM algorithm, after nca to refine details

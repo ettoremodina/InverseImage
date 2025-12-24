@@ -17,3 +17,16 @@ class RenderConfig:
     branch_tip_width: float = 1.0
     
     antialiasing: bool = True
+
+
+@dataclass
+class NCARenderConfig:
+    output_width: int = 512
+    output_height: int = 512
+    background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
+    
+    cell_shape: str = "circle"  # "circle", "square", "hexagon"
+    cell_scale: float = 1.0  # multiplier for cell size (1.0 = cells touch)
+    alpha_threshold: float = 0.1  # cells below this alpha are not drawn
+    
+    antialiasing: bool = True

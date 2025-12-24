@@ -11,49 +11,14 @@ import imageio
 from tqdm import tqdm
 from typing import Dict, Any, Tuple
 from pathlib import Path
-from dataclasses import dataclass, field
+
+from .config import NCARenderConfig
+from .base import Renderer
 
 
-@dataclass
-class NCARenderConfig:
-    output_width: int = 512
-    output_height: int = 512
-    background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
-    
-    cell_shape: str = "circle"  # "circle", "square", "hexagon"
-    cell_scale: float = 1.0  # multiplier for cell size (1.0 = cells touch)
-    alpha_threshold: float = 0.1  # cells below this alpha are not drawn
-    
-    # Future: jitter, glow, etc.
-    # jitter_amount: float = 0.0
-    # glow_radius: float = 0.0
-    # glow_intensity: float = 0.0
-
-
-class NCARenderer:
+class NCARenderer(Renderer):
     def __init__(self, config: NCARenderConfig = None):
-        self.config = config or NCARenderConfig()
-    
-    def _create_surface(self) -> Tuple[cairo.ImageSurface, cairo.Context]:
-        surface = cairo.ImageSurface(
-            cairo.FORMAT_ARGB32,
-            self.config.output_width,
-            self.config.output_height
-        )
-        ctx = cairo.Context(surface)
-        ctx.set_antialias(cairo.ANTIALIAS_BEST)
-        
-        r, g, b, a = self.config.background_color
-        ctx.set_source_rgba(r, g, b, a)
-        ctx.paint()
-        
-        return surface, ctx
-    
-    def _compute_cell_params(self, source_width: int, source_height: int):
-        """Compute cell size and offset for upsampling."""
-        cell_w = self.config.output_width / source_width
-        cell_h = self.config.output_height / source_height
-        return cell_w, cell_h
+        super().__init__(config or NCARenderConfig())
     
     def _draw_cell_circle(self, ctx: cairo.Context, cx: float, cy: float, 
                           radius: float, r: float, g: float, b: float, a: float):
@@ -68,20 +33,9 @@ class NCARenderer:
         ctx.rectangle(cx - half, cy - half, size, size)
         ctx.fill()
     
-    def render_frame(self, frame: np.ndarray, source_width: int, source_height: int) -> np.ndarray:
-        """
-        Render a single NCA frame.
-        
-        Args:
-            frame: RGBA array of shape [H, W, 4], values in [0, 1]
-            source_width, source_height: original grid dimensions
-        
-        Returns:
-            RGBA numpy array of shape [output_height, output_width, 4]
-        """
-        surface, ctx = self._create_surface()
-        
-        cell_w, cell_h = self._compute_cell_params(source_width, source_height)
+    def _draw_cells(self, ctx: cairo.Context, frame: np.ndarray, source_width: int, source_height: int):
+        """Draw NCA cells on the given context."""
+        cell_w, cell_h = self._compute_scale(source_width, source_height)
         cell_size = min(cell_w, cell_h)
         radius = (cell_size / 2) * self.config.cell_scale
         
@@ -98,28 +52,26 @@ class NCARenderer:
                 cy = (y + 0.5) * cell_h
                 
                 if self.config.cell_shape == "circle":
-                    draw_radius = radius * (0.5 + 0.5 * a)  # size varies with alpha
+                    draw_radius = radius * (0.5 + 0.5 * a)
                     self._draw_cell_circle(ctx, cx, cy, draw_radius, r, g, b, a)
                 else:
                     draw_size = cell_size * self.config.cell_scale * (0.5 + 0.5 * a)
                     self._draw_cell_square(ctx, cx, cy, draw_size, r, g, b, a)
+
+    def render_frame(self, frame: np.ndarray, source_width: int, source_height: int) -> np.ndarray:
+        """
+        Render a single NCA frame.
         
+        Args:
+            frame: RGBA array of shape [H, W, 4], values in [0, 1]
+            source_width, source_height: original grid dimensions
+        
+        Returns:
+            RGBA numpy array of shape [output_height, output_width, 4]
+        """
+        surface, ctx = self._create_surface()
+        self._draw_cells(ctx, frame, source_width, source_height)
         return self._surface_to_numpy(surface)
-    
-    def _surface_to_numpy(self, surface: cairo.ImageSurface) -> np.ndarray:
-        buf = surface.get_data()
-        arr = np.ndarray(
-            shape=(self.config.output_height, self.config.output_width, 4),
-            dtype=np.uint8,
-            buffer=buf
-        )
-        arr_copy = arr.copy()
-        arr_rgba = np.zeros_like(arr_copy)
-        arr_rgba[:, :, 0] = arr_copy[:, :, 2]  # R
-        arr_rgba[:, :, 1] = arr_copy[:, :, 1]  # G
-        arr_rgba[:, :, 2] = arr_copy[:, :, 0]  # B
-        arr_rgba[:, :, 3] = arr_copy[:, :, 3]  # A
-        return arr_rgba
     
     def render_animation(self, data: Dict[str, Any], output_path: str, fps: int = 30):
         """

@@ -6,9 +6,9 @@
   "influence_radius": 50.0,
   "kill_distance": 1.0,
   "growth_step": 1.0,
-  "num_branches": 217564,
-  "iterations": 704,
-  "num_seeds": 100,
+  "num_branches": 193965,
+  "iterations": 679,
+  "num_seeds": 1000,
   "render_data_path": "outputs\\sca\\Brini_render_data.json",
   "seeds_path": "outputs\\sca\\Brini_seeds.json"
 }

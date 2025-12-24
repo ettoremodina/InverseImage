@@ -27,7 +27,7 @@
   "max_iterations": 800,
   "stagnation_limit": 100,
   "seed_mode": "tips",
-  "max_seeds": 100,
+  "max_seeds": 1000,
   
   "render_size": 512,
   "render_fps": 20,

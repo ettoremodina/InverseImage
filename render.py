@@ -159,7 +159,7 @@ def render_combined(pipeline):
     nca_render_config = NCARenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size,
-        cell_shape="circle",
+        cell_shape="square",
         cell_scale=1.0
     )
     
@@ -167,7 +167,7 @@ def render_combined(pipeline):
     nca_data = load_nca_frames(nca_npz_path)
     
     combined_output = str(pipeline.render_combined_gif_path.with_suffix('.mp4'))
-    combined_renderer.render_combined_animation(
+    combined_renderer.render_animation(
         sca_data, 
         nca_data, 
         combined_output, 

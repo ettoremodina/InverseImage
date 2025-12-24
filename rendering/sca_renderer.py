@@ -11,42 +11,24 @@ from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
 from .config import RenderConfig
+from .base import Renderer
 
 
-class SCARenderer:
+class SCARenderer(Renderer):
     def __init__(self, config: RenderConfig = None):
-        self.config = config or RenderConfig()
-    
-    def _create_surface(self) -> Tuple[cairo.ImageSurface, cairo.Context]:
-        surface = cairo.ImageSurface(
-            cairo.FORMAT_ARGB32,
-            self.config.output_width,
-            self.config.output_height
-        )
-        ctx = cairo.Context(surface)
-        
-        if self.config.antialiasing:
-            ctx.set_antialias(cairo.ANTIALIAS_BEST)
-        
-        r, g, b, a = self.config.background_color
-        ctx.set_source_rgba(r, g, b, a)
-        ctx.paint()
-        
-        return surface, ctx
-    
-    def _compute_scale(self, source_width: int, source_height: int) -> Tuple[float, float]:
-        scale_x = self.config.output_width / source_width
-        scale_y = self.config.output_height / source_height
-        return scale_x, scale_y
+        super().__init__(config or RenderConfig())
     
     def _draw_branches(self, ctx: cairo.Context, branches: List[Dict], 
-                       scale_x: float, scale_y: float, max_depth: int):
+                       scale_x: float, scale_y: float, max_depth: int, max_depth_limit: int = None):
         r, g, b, a = self.config.branch_color
         ctx.set_source_rgba(r, g, b, a)
         ctx.set_line_cap(cairo.LINE_CAP_ROUND)
         ctx.set_line_join(cairo.LINE_JOIN_ROUND)
         
         for branch in branches:
+            if max_depth_limit is not None and branch.get('depth', 0) > max_depth_limit:
+                continue
+            
             x1, y1 = branch['start']
             x2, y2 = branch['end']
             
@@ -74,29 +56,9 @@ class SCARenderer:
         all_branches = data['branches']
         global_max_depth = max(b.get('depth', 0) for b in all_branches) if all_branches else 1
         
-        if max_depth_limit is not None:
-            branches = [b for b in all_branches if b.get('depth', 0) <= max_depth_limit]
-        else:
-            branches = all_branches
-        
-        self._draw_branches(ctx, branches, scale_x, scale_y, global_max_depth)
+        self._draw_branches(ctx, all_branches, scale_x, scale_y, global_max_depth, max_depth_limit)
         
         return self._surface_to_numpy(surface)
-    
-    def _surface_to_numpy(self, surface: cairo.ImageSurface) -> np.ndarray:
-        buf = surface.get_data()
-        arr = np.ndarray(
-            shape=(self.config.output_height, self.config.output_width, 4),
-            dtype=np.uint8,
-            buffer=buf
-        )
-        arr_copy = arr.copy()
-        arr_rgba = np.zeros_like(arr_copy)
-        arr_rgba[:, :, 0] = arr_copy[:, :, 2]  # R
-        arr_rgba[:, :, 1] = arr_copy[:, :, 1]  # G
-        arr_rgba[:, :, 2] = arr_copy[:, :, 0]  # B
-        arr_rgba[:, :, 3] = arr_copy[:, :, 3]  # A
-        return arr_rgba
     
     def save_frame(self, data: Dict[str, Any], output_path: str):
         frame = self.render_frame(data)
