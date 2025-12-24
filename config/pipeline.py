@@ -74,8 +74,8 @@ class PipelineConfig:
         self.nca_render.output_width = self.render_size
         self.nca_render.output_height = self.render_size
         
-        self.render.output_width = self.render_size * 4 # High res for SCA
-        self.render.output_height = self.render_size * 4
+        self.sca_render.output_width = self.render_size * 4 # High res for SCA
+        self.sca_render.output_height = self.render_size * 4
     
     # ==================== DERIVED PATHS ====================
     @property

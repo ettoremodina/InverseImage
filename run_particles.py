@@ -71,7 +71,8 @@ def main():
         num_particles=pipeline.particles.particle_count,
         speed=pipeline.particles.particle_speed,
         trail_fade=pipeline.particles.particle_trail_fade,
-        stretch_factor=pipeline.particles.particle_stretch_factor
+        stretch_factor=pipeline.particles.particle_stretch_factor,
+        radius=pipeline.particles.particle_radius
     )
 
 if __name__ == '__main__':

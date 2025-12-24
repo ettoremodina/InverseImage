@@ -10,21 +10,14 @@ import cairo
 import numpy as np
 import imageio
 import cv2
-import multiprocessing
 from tqdm import tqdm
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from pathlib import Path
 
 from config.render_config import SCARenderConfig, NCARenderConfig
 from .base import Renderer
 from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer
-
-
-def render_combined_frame_wrapper(args):
-    config, nca_config, sca_data, nca_frame, max_depth_limit, time = args
-    renderer = CombinedRenderer(config, nca_config)
-    return renderer.render_frame(sca_data, nca_frame=nca_frame, max_depth_limit=max_depth_limit, time=time)
 
 
 class CombinedRenderer(Renderer):
@@ -98,7 +91,7 @@ class CombinedRenderer(Renderer):
         time = 0.0
         dt = 1.0 / fps
         
-        # Prepare tasks for parallel execution
+        # Prepare tasks
         tasks = []
         
         # Phase 1: SCA growth
@@ -106,7 +99,8 @@ class CombinedRenderer(Renderer):
             for i in range(sca_frames):
                 t = i / max(sca_frames - 1, 1)
                 target_depth = int(t * max_depth)
-                tasks.append((self.config, self.nca_config, sca_data, None, target_depth, time))
+                # Task: (nca_frame, max_depth_limit, time)
+                tasks.append((None, target_depth, time))
                 time += dt
         
         # Phase 2: NCA growth
@@ -115,16 +109,14 @@ class CombinedRenderer(Renderer):
             nca_indices = np.linspace(0, len(nca_frames_data) - 1, nca_frames, dtype=int)
             for idx in nca_indices:
                 nca_frame = nca_frames_data[idx]
-                tasks.append((self.config, self.nca_config, sca_data, nca_frame, None, time))
+                tasks.append((nca_frame, None, time))
                 time += dt
 
-        # Execute parallel tasks (SCA phase + NCA phase if no smoothing)
-        num_cores = max(1, multiprocessing.cpu_count() - 1)
-        
+        # Execute tasks sequentially
         if tasks:
-            print(f"Rendering {len(tasks)} frames with {num_cores} cores...")
-            with multiprocessing.Pool(processes=num_cores) as pool:
-                rendered_frames.extend(list(tqdm(pool.imap(render_combined_frame_wrapper, tasks), total=len(tasks), desc="Rendering Frames")))
+            print(f"Rendering {len(tasks)} frames...")
+            for nca_frame, max_depth_limit, t in tqdm(tasks, desc="Rendering Frames"):
+                rendered_frames.append(self.render_frame(sca_data, nca_frame=nca_frame, max_depth_limit=max_depth_limit, time=t))
         
         # Phase 2 with Smoothing (Sequential)
         if self.nca_config.temporal_smoothing > 0 and nca_frames > 0:

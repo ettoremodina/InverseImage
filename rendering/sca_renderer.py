@@ -7,19 +7,12 @@ import cairo
 import numpy as np
 import imageio
 import math
-import multiprocessing
 from tqdm import tqdm
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 
 from config.render_config import SCARenderConfig
 from .base import Renderer
-
-
-def render_sca_frame_wrapper(args):
-    config, data, max_depth_limit, time = args
-    renderer = SCARenderer(config)
-    return renderer.render_frame(data, max_depth_limit=max_depth_limit, time=time)
 
 
 class SCARenderer(Renderer):
@@ -39,6 +32,10 @@ class SCARenderer(Renderer):
         # Build parent map for spline interpolation
         # Map end_point -> branch
         end_point_map = {tuple(b['end']): b for b in branches}
+        
+        # Pre-calculate sway constants
+        sway_mag = self.config.sway_magnitude
+        sway_freq = self.config.sway_frequency
         
         for branch in branches:
             if max_depth_limit is not None and branch.get('depth', 0) > max_depth_limit:
@@ -66,24 +63,23 @@ class SCARenderer(Renderer):
                 x_prev, y_prev = x_start, y_start # Root case
 
             # Apply Swaying to all points
-            def apply_sway(x, y, d):
-                if self.config.sway_magnitude <= 0:
-                    return x, y
-                
-                t_sway = d / max_depth if max_depth > 0 else 0
-                sway_amount = self.config.sway_magnitude * (t_sway ** 2)
-                phase = d * 0.2 + y * 0.05
-                offset_x = math.sin(time * self.config.sway_frequency + phase) * sway_amount
-                return x + offset_x, y
+            if sway_mag > 0:
+                def get_sway(x, y, d):
+                    t_s = d / max_depth if max_depth > 0 else 0
+                    s_a = sway_mag * (t_s ** 2)
+                    p = d * 0.2 + y * 0.05
+                    return x + math.sin(time * sway_freq + p) * s_a, y
 
-            # We need depths for sway calculation
-            d_curr = depth
-            d_prev = parent.get('depth', 0) if parent else 0
-            d_next = d_curr + 1 # Approximate for end point
-            
-            px, py = apply_sway(x_prev, y_prev, d_prev)
-            sx, sy = apply_sway(x_start, y_start, d_curr)
-            ex, ey = apply_sway(x_end, y_end, d_next)
+                d_prev = parent.get('depth', 0) if parent else 0
+                d_next = depth + 1
+                
+                px, py = get_sway(x_prev, y_prev, d_prev)
+                sx, sy = get_sway(x_start, y_start, depth)
+                ex, ey = get_sway(x_end, y_end, d_next)
+            else:
+                px, py = x_prev, y_prev
+                sx, sy = x_start, y_start
+                ex, ey = x_end, y_end
             
             # Scale points
             px, py = px * scale_x, py * scale_y
@@ -91,9 +87,6 @@ class SCARenderer(Renderer):
             ex, ey = ex * scale_x, ey * scale_y
             
             # Calculate midpoints for Chaikin/Bezier smoothing
-            # We draw from Mid(Prev, Start) to Mid(Start, End)
-            # Control point is Start
-            
             if parent:
                 mx1, my1 = (px + sx) / 2, (py + sy) / 2
             else:
@@ -104,28 +97,21 @@ class SCARenderer(Renderer):
             width = self.config.branch_base_width * (1 - t) + self.config.branch_tip_width * t
             ctx.set_line_width(width)
             
-            # Draw the main curve segment for this branch (covering the joint at Start)
+            # Draw the main curve segment
             ctx.move_to(mx1, my1)
             if parent:
-                ctx.curve_to(sx, sy, sx, sy, mx2, my2) # Quadratic bezier using cubic command (CP1=CP2=Control)
-                # Actually for quadratic P0->P2 with control P1:
-                # Cubic equivalent: CP1 = P0 + 2/3(P1-P0), CP2 = P2 + 2/3(P1-P2)
+                # Quadratic bezier using cubic command
                 cp1x = mx1 + (2/3) * (sx - mx1)
                 cp1y = my1 + (2/3) * (sy - my1)
                 cp2x = mx2 + (2/3) * (sx - mx2)
                 cp2y = my2 + (2/3) * (sy - my2)
                 ctx.curve_to(cp1x, cp1y, cp2x, cp2y, mx2, my2)
             else:
-                ctx.line_to(mx2, my2) # Straight line from root to first mid
+                ctx.line_to(mx2, my2)
             
             ctx.stroke()
             
-            # If this is a tip (or we are at the limit), we need to finish the segment
-            # Draw from Mid(Start, End) to End
-            # We can just draw a straight line for the tip segment, or curve it if we had next point
-            # Since it's a tip, straight line is fine.
-            
-            # Check if it's a tip in the full tree OR if we hit the render limit
+            # Draw tip if needed
             is_visual_tip = branch.get('is_tip', False) or (max_depth_limit is not None and depth == max_depth_limit)
             
             if is_visual_tip:
@@ -171,18 +157,15 @@ class SCARenderer(Renderer):
         dt = 1.0 / fps
         
         for depth in depths_to_render:
-            tasks.append((self.config, data, depth, time))
+            tasks.append((depth, time))
             time += dt
         
         # Add final frame
-        tasks.append((self.config, data, None, time))
+        tasks.append((None, time))
         
-        # Parallel rendering
-        num_cores = max(1, multiprocessing.cpu_count() - 1)
-        print(f"Rendering with {num_cores} cores...")
-        
-        with multiprocessing.Pool(processes=num_cores) as pool:
-            frames = list(tqdm(pool.imap(render_sca_frame_wrapper, tasks), total=len(tasks), desc="Rendering SCA frames (Parallel)"))
+        print("Rendering SCA frames...")
+        for depth, t in tqdm(tasks, desc="Rendering SCA frames"):
+            frames.append(self.render_frame(data, max_depth_limit=depth, time=t))
         
         imageio.mimsave(output_path, frames, fps=fps)
         print(f"  Saved animation: {output_path}")

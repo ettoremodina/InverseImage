@@ -167,6 +167,9 @@ def render_particles(pipeline):
         fps=pipeline.render_fps,
         num_particles=pipeline.particles.particle_count,
         speed=pipeline.particles.particle_speed,
+        trail_fade=pipeline.particles.particle_trail_fade,
+        stretch_factor=pipeline.particles.particle_stretch_factor,
+        radius=pipeline.particles.particle_radius,
         device=pipeline.device
     )
     
