@@ -8,5 +8,5 @@ target images from a single seed cell.
 from .config import Config, ResolutionStage
 from .model import CAModel
 from .data import load_image, prepare_image, create_seed
-from .training import Trainer, ProgressiveTrainer
+from .training import Trainer
 from .visualization import display_animation, save_animation, save_training_gif

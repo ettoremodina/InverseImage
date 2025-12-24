@@ -86,6 +86,14 @@ class CombinedRenderer(Renderer):
         all_branches = sca_data['branches']
         max_depth = max(b.get('depth', 0) for b in all_branches) if all_branches else 1
         
+        # Pre-sort branches by depth for faster incremental rendering
+        branches_by_depth = {}
+        for b in all_branches:
+            d = b.get('depth', 0)
+            if d not in branches_by_depth:
+                branches_by_depth[d] = []
+            branches_by_depth[d].append(b)
+        
         source_w = sca_data['source_width']
         source_h = sca_data['source_height']
         scale_x = self.config.output_width / source_w
@@ -99,19 +107,33 @@ class CombinedRenderer(Renderer):
         
         rendered_frames = []
         
+        # Create persistent surface for SCA growth
+        # We draw incrementally on this surface
+        surface, ctx = self._create_surface()
+        current_rendered_depth = -1
+        
         # Phase 1: SCA growth (progressive by depth)
         print(f"Rendering SCA growth phase ({sca_frames} frames)...")
         if sca_frames > 0:
             for i in tqdm(range(sca_frames), desc="SCA phase"):
-                surface, ctx = self._create_surface()
-                
                 # Calculate which depth to show
                 t = i / max(sca_frames - 1, 1)
-                current_depth = int(t * max_depth)
+                target_depth = int(t * max_depth)
                 
-                self.sca_renderer._draw_branches(ctx, all_branches, scale_x, scale_y, max_depth, current_depth)
+                # Draw only new depths incrementally
+                if target_depth > current_rendered_depth:
+                    for d in range(current_rendered_depth + 1, target_depth + 1):
+                        if d in branches_by_depth:
+                            self.sca_renderer._draw_branches(ctx, branches_by_depth[d], scale_x, scale_y, max_depth, None)
+                    current_rendered_depth = target_depth
                 
                 rendered_frames.append(self._surface_to_numpy(surface))
+        
+        # Ensure full tree is drawn before NCA phase
+        if current_rendered_depth < max_depth:
+            for d in range(current_rendered_depth + 1, max_depth + 1):
+                if d in branches_by_depth:
+                    self.sca_renderer._draw_branches(ctx, branches_by_depth[d], scale_x, scale_y, max_depth, None)
         
         # Phase 2: NCA growth on top of full SCA tree
         print(f"Rendering NCA growth phase ({nca_frames} frames)...")
@@ -119,17 +141,22 @@ class CombinedRenderer(Renderer):
             # Sample NCA frames evenly
             nca_indices = np.linspace(0, len(nca_frames_data) - 1, nca_frames, dtype=int)
             
+            # The 'surface' now contains the full SCA tree. We use it as a source pattern.
+            sca_background_surface = surface
+            
             for idx in tqdm(nca_indices, desc="NCA phase"):
-                surface, ctx = self._create_surface()
+                # Create new surface for this frame
+                frame_surface, frame_ctx = self._create_surface()
                 
-                # Draw full SCA tree in background
-                self.sca_renderer._draw_branches(ctx, all_branches, scale_x, scale_y, max_depth, None)
+                # Blit the cached SCA background (extremely fast)
+                frame_ctx.set_source_surface(sca_background_surface, 0, 0)
+                frame_ctx.paint()
                 
                 # Draw NCA cells on top
                 nca_frame = nca_frames_data[idx]
-                self._draw_nca_cells(ctx, nca_frame, nca_source_w, nca_source_h)
+                self._draw_nca_cells(frame_ctx, nca_frame, nca_source_w, nca_source_h)
                 
-                rendered_frames.append(self._surface_to_numpy(surface))
+                rendered_frames.append(self._surface_to_numpy(frame_surface))
         
         # Save animation
         imageio.mimsave(output_path, rendered_frames, fps=fps)

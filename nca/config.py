@@ -42,9 +42,17 @@ class Config:
     target_size: int = 128
     target_padding: int = 16
 
+    nca_steps: int = 64  # Steps for inference/demo
+
+    # Training
     n_epochs: int = 2000
     batch_size: int = 8
     steps_per_epoch: int = 50
+    steps_variance: float = 0.0  # Standard deviation for Gaussian distribution of steps
+    
+    # Persistence (Pool)
+    use_pattern_pool: bool = True
+    pool_size: int = 1024
 
     lr: float = 2e-3
     lr_gamma: float = 0.9999

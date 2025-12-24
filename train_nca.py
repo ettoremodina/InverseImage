@@ -19,13 +19,13 @@ from pathlib import Path
 
 from config import load_config
 from nca import Config, CAModel, create_seed
-from nca.training import Trainer, ProgressiveTrainer
+from nca.training import Trainer
 from nca.visualization import save_animation, plot_training_loss
 
 
 def train_progressive(nca_config: Config, output_dir: Path, model_path: Path):
     model = CAModel(nca_config).to(nca_config.device)
-    trainer = ProgressiveTrainer(model, nca_config, output_dir=str(output_dir),
+    trainer = Trainer(model, nca_config, output_dir=str(output_dir),
                                   seed_positions=nca_config.seed_positions)
 
     all_losses = trainer.train()
@@ -41,10 +41,13 @@ def train_progressive(nca_config: Config, output_dir: Path, model_path: Path):
 
 def train_single_resolution(nca_config: Config, model_path: Path, loss_path: Path):
     model = CAModel(nca_config).to(nca_config.device)
-    trainer = Trainer(model, nca_config, seed_positions=nca_config.seed_positions)
+    output_dir = model_path.parent
+    trainer = Trainer(model, nca_config, output_dir=str(output_dir), seed_positions=nca_config.seed_positions)
 
-    losses = trainer.train(nca_config.image_path)
+    all_losses = trainer.train()
     trainer.save_model(str(model_path))
+    
+    losses = list(all_losses.values())[0]
     plot_training_loss(losses, save_path=str(loss_path))
 
     final_loss = losses[-1] if losses else None

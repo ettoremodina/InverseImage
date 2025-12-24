@@ -1,5 +1,4 @@
 # TODO
-- improve speed of rendering
 - Persistence and morphing for nca
 
 ## RD algorithm

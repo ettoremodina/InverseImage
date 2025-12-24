@@ -397,55 +397,55 @@ This works because the gradients are invariant to coordinate frame choice.
 ### File Structure
 
 ```
-NeuralCellularAutomata_PyTorch/
-├── core.py                 # Base model, filters, utilities
-├── learning_to_grow.py     # Experiment 1: Seed initialization
-├── what_persists_exists.py # Experiment 2: SamplePool
-├── learning_to_regenerate.py # Experiment 3: CorruptedPool
+NCA-DifferentialGrowth/
+├── nca/
+│   ├── model.py            # CAModel, PerchannelConv2d
+│   ├── training.py         # Trainer, SamplePool
+│   ├── data.py             # Image loading, seed creation
+│   └── config.py           # Configuration classes
+├── train_nca.py            # Main training script
+└── config/                 # Pipeline configuration
 ```
 
 ### Key Functions
 
 | Function | File | Description |
 |----------|------|-------------|
-| `perchannel_conv` | core.py | Applies Sobel filters per channel |
-| `alive` | core.py | Computes alive mask via max pooling |
-| `CAModel` | core.py | Main neural CA model |
-| `display_animation` | core.py | Visualizes growth animation |
-| `grow_animation` | core.py | Generates animation frames |
-| `SamplePool` | what_persists_exists.py | Pool-based training |
-| `create_hole` | learning_to_regenerate.py | Creates circular damage |
-| `CorruptedPool` | learning_to_regenerate.py | Pool with damage sampling |
+| `CAModel` | nca/model.py | Main neural CA model |
+| `Trainer` | nca/training.py | Unified training loop |
+| `SamplePool` | nca/training.py | Pattern pool for persistence |
+| `create_seed` | nca/data.py | Creates initial seed state |
+| `save_animation` | nca/visualization.py | Generates GIFs |
 
 ### Training Recipe
 
+The training logic is encapsulated in the `Trainer` class in `nca/training.py`.
+
 ```python
 # Initialize
-ca = CAModel(16).to(device)
-target = load_image('path/to/image.png')
-pool = SamplePool(pool_size=1024, loss_fn=partial(mse, target=target))
-optimizer = torch.optim.Adam(ca.parameters(), lr=2e-3)
+config = Config()
+model = CAModel(config).to(device)
+trainer = Trainer(model, config)
 
-# Training loop
-for step in range(num_steps):
-    batch = pool.sample(batch_size=8)
+# Training loop (simplified)
+pool = SamplePool(pool_size=1024, seed=seed, target=target)
+
+for epoch in range(epochs):
+    # Sample from pool
+    batch = pool.sample(batch_size)
     
-    # Random number of CA steps (64-96)
-    n_steps = random.randint(64, 96)
-    output = ca(batch, steps=n_steps)
+    # Run CA steps
+    output = model(batch, steps=steps)
     
-    # Loss on RGBA channels only
-    loss = mse(output[:, :4], target).mean()
+    # Compute loss
+    loss = mse(output[:, :4], target)
     
-    optimizer.zero_grad()
-    loss.backward()
-    
-    # Gradient normalization (stabilizes training)
-    for p in ca.parameters():
-        p.grad.data = p.grad.data / (p.grad.data.norm() + 1e-8)
-    
-    optimizer.step()
+    # Update pool
     pool.update(output)
+    
+    # Backprop
+    loss.backward()
+    optimizer.step()
 ```
 
 ---

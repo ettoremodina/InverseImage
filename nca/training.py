@@ -10,6 +10,7 @@ Progressive Training Strategy:
 """
 
 from pathlib import Path
+from typing import Optional, List, Dict, Union
 
 import torch
 import torch.nn.functional as F
@@ -20,186 +21,129 @@ from tqdm import tqdm
 from .config import Config, ResolutionStage
 from .model import CAModel
 from .data import load_image, create_seed
+from .visualization import save_animation
+
+
+class SamplePool:
+    """
+    Maintains a pool of patterns for training stability (persistence).
+    Prevents catastrophic forgetting by mixing seeds with evolved states.
+    """
+    def __init__(self, pool_size: int, seed: torch.Tensor, target: torch.Tensor):
+        self.pool_size = pool_size
+        self.seed = seed
+        self.target = target
+        self.device = seed.device
+        
+        # Initialize pool with seeds
+        self.pool = seed.repeat(pool_size, 1, 1, 1)
+        self.current_idxs = None
+
+    def sample(self, batch_size: int):
+        # Select random indices
+        self.current_idxs = torch.randperm(self.pool_size)[:batch_size]
+        batch = self.pool[self.current_idxs]
+        
+        # Replace worst sample with seed to prevent forgetting
+        with torch.no_grad():
+            # Calculate MSE loss for ranking
+            target_batch = self.target.repeat(batch_size, 1, 1, 1)
+            loss = F.mse_loss(batch[:, :4], target_batch, reduction='none')
+            loss = loss.view(batch_size, -1).sum(dim=1)
+            
+            worst_idx = torch.argmax(loss)
+            batch[worst_idx] = self.seed[0]
+            
+        return batch
+
+    def update(self, new_states: torch.Tensor):
+        # Update pool with new states
+        with torch.no_grad():
+            self.pool[self.current_idxs] = new_states.detach()
 
 
 class Trainer:
-    """Handles training of the CAModel at a single resolution."""
-    
-    def __init__(self, model: CAModel, config: Config = None, seed_positions: list = None):
-        if config is None:
-            config = Config()
-        
-        self.model = model
-        self.config = config
-        self.seed_positions = seed_positions
-        self.losses = []
-        
-        self.optimizer = optim.Adam(
-            model.parameters(),
-            lr=config.lr,
-            betas=config.betas
-        )
-        self.scheduler = optim.lr_scheduler.ExponentialLR(
-            self.optimizer,
-            config.lr_gamma
-        )
-        
-        self.scaler = GradScaler('cuda') if config.use_mixed_precision else None
-    
-    def train(self, target_path, seed=None, verbose=True):
-        target = load_image(target_path, self.config)
-        target_batch = target.repeat(self.config.batch_size, 1, 1, 1)
-        
-        if seed is None:
-            seed = create_seed(self.config, positions=self.seed_positions)
-        model_in = seed.repeat(self.config.batch_size, 1, 1, 1)
-        
-        self.losses = []
-        iterator = tqdm(range(self.config.n_epochs)) if verbose else range(self.config.n_epochs)
-        
-        try:
-            for epoch in iterator:
-                self.optimizer.zero_grad()
-                
-                if self.config.use_mixed_precision and self.config.device == 'cuda':
-                    with autocast('cuda'):
-                        result = self.model(model_in, steps=self.config.steps_per_epoch)
-                        loss = F.mse_loss(result[:, :4], target_batch)
-                    self.scaler.scale(loss).backward()
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    result = self.model(model_in, steps=self.config.steps_per_epoch)
-                    loss = F.mse_loss(result[:, :4], target_batch)
-                    loss.backward()
-                    self.optimizer.step()
-                
-                self.scheduler.step()
-                self.losses.append(loss.item())
-                
-                if verbose and epoch % self.config.log_interval == 0:
-                    tqdm.write(f"Epoch {epoch}: Loss = {loss.item():.6f}")
-                
-                if self.config.checkpoint_interval > 0 and epoch > 0 and epoch % self.config.checkpoint_interval == 0:
-                    self._save_checkpoint(target_path, epoch)
-        
-        except KeyboardInterrupt:
-            print(f"\nInterrupted at epoch {epoch}. Saving model...")
-            self._save_interrupt(target_path, epoch)
-            raise
-        
-        return self.losses
-    
-    def _save_interrupt(self, target_path, epoch):
-        output_dir = Path(self.config.output_dir)
-        output_dir.mkdir(exist_ok=True)
-        image_name = Path(target_path).stem
-        path = output_dir / f"{image_name}_interrupted_epoch{epoch}_model.pt"
-        self.save_model(str(path))
-    
-    def _save_checkpoint(self, target_path, epoch):
-        checkpoint_dir = Path(self.config.output_dir) / "checkpoints"
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        image_name = Path(target_path).stem
-        path = checkpoint_dir / f"{image_name}_epoch{epoch}_model.pt"
-        self.save_model(str(path))
-    
-    def save_model(self, path):
-        torch.save({
-            'model_state_dict': self.model.state_dict(),
-            'config': self.config
-        }, path)
-        print(f"Model saved to {path}")
-    
-    def load_model(self, path):
-        checkpoint = torch.load(path, map_location=self.config.device, weights_only=False)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Model loaded from {path}")
-
-
-class ProgressiveTrainer:
     """
-    Trains the model progressively at increasing resolutions.
-    
-    How it works:
-    1. Start training at low resolution (e.g., 40x40)
-       - Fast iteration, learns the basic growth patterns
-       - Full batch size fits in memory
-    
-    2. Fine-tune at medium resolution (e.g., 128x128)
-       - Smaller batch size to fit in memory
-       - Gradient accumulation maintains effective batch size
-       - Model already knows patterns, just refines them
-    
-    3. Final fine-tuning at target resolution (e.g., 256x256)
-       - Batch size of 1 with more accumulation steps
-       - Mixed precision halves memory usage
-       - Learns fine details
-    
-    Why this works:
-    - The NCA "genome" (weights) is resolution-independent
-    - Patterns learned at 40x40 transfer to 256x256
-    - High-res training only needs to refine, not learn from scratch
+    Unified Trainer for CAModel.
+    Handles both single-resolution and progressive training based on configuration.
     """
     
     def __init__(self, model: CAModel, config: Config, output_dir: str = None, seed_positions: list = None):
         self.model = model
         self.config = config
         self.seed_positions = seed_positions
-        self.all_losses = {}
         self.output_dir = Path(output_dir) if output_dir else Path(config.output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(exist_ok=True, parents=True)
         self.base_name = Path(config.image_path).stem
         
         self.scaler = GradScaler('cuda') if config.use_mixed_precision else None
+        self.all_losses = {}
     
     def _create_optimizer(self, lr: float):
-        """Create fresh optimizer (needed when changing resolution)."""
+        """Create fresh optimizer."""
         return optim.Adam(
             self.model.parameters(),
             lr=lr,
             betas=self.config.betas
         )
     
-    def _load_target_and_seed(self, stage: ResolutionStage):
-        """Load target image and create seed at the given resolution."""
-        temp_config = Config(
-            target_size=stage.size,
-            device=self.config.device,
-            channel_n=self.config.channel_n
-        )
-        target = load_image(self.config.image_path, temp_config)
-        scaled_positions = self._scale_positions(stage.size) if self.seed_positions else None
-        seed = create_seed(temp_config, positions=scaled_positions)
-        return target, seed
-    
     def _scale_positions(self, target_size: int):
         """Scale seed positions to target resolution."""
         if not self.seed_positions:
             return None
-        base_size = self.config.progressive_stages[0].size if self.config.progressive_stages else self.config.target_size
+        
+        # Determine base size for scaling
+        if self.config.progressive_stages:
+            base_size = self.config.progressive_stages[0].size
+        else:
+            base_size = self.config.target_size
+            
         scale = target_size / base_size
         return [(int(x * scale), int(y * scale)) for x, y in self.seed_positions]
+    
+    def _load_target_and_seed(self, size: int):
+        """Load target image and create seed at the given resolution."""
+        temp_config = Config(
+            target_size=size,
+            device=self.config.device,
+            channel_n=self.config.channel_n
+        )
+        target = load_image(self.config.image_path, temp_config)
+        scaled_positions = self._scale_positions(size)
+        seed = create_seed(temp_config, positions=scaled_positions)
+        return target, seed
+    
+    def _get_steps(self):
+        """Get number of steps for current iteration, possibly randomized."""
+        if self.config.steps_variance > 0:
+            steps = int(torch.normal(float(self.config.steps_per_epoch), self.config.steps_variance, (1,)).item())
+            return max(1, steps)
+        return self.config.steps_per_epoch
     
     def train_stage(self, stage: ResolutionStage, lr: float, verbose: bool = True):
         """
         Train at a single resolution stage.
-        
-        Uses gradient accumulation: instead of batch_size=8 at once,
-        we do batch_size=1 eight times and accumulate gradients.
-        Same mathematical result, 8x less memory.
         """
-        print(f"\n{'='*60}")
-        print(f"Training at {stage.size}x{stage.size}")
-        print(f"  Batch size: {stage.batch_size}")
-        print(f"  Accumulation steps: {stage.accumulation_steps}")
-        print(f"  Effective batch size: {stage.effective_batch_size}")
-        print(f"  Epochs: {stage.epochs}")
-        print(f"  Learning rate: {lr:.6f}")
-        print(f"{'='*60}\n")
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Training at {stage.size}x{stage.size}")
+            print(f"  Batch size: {stage.batch_size}")
+            print(f"  Accumulation steps: {stage.accumulation_steps}")
+            print(f"  Effective batch size: {stage.effective_batch_size}")
+            print(f"  Epochs: {stage.epochs}")
+            print(f"  Learning rate: {lr:.6f}")
+            print(f"{'='*60}\n")
         
-        target, seed = self._load_target_and_seed(stage)
+        target, seed = self._load_target_and_seed(stage.size)
         target_batch = target.repeat(stage.batch_size, 1, 1, 1)
+        
+        # Initialize Pool if enabled
+        pool = None
+        if self.config.use_pattern_pool:
+            pool = SamplePool(self.config.pool_size, seed, target)
+            if verbose:
+                print(f"  Initialized pattern pool (size: {self.config.pool_size})")
+        
         model_in_template = seed.repeat(stage.batch_size, 1, 1, 1)
         
         optimizer = self._create_optimizer(lr)
@@ -215,20 +159,28 @@ class ProgressiveTrainer:
                 optimizer.zero_grad()
                 accumulated_loss = 0.0
                 
-                for acc_step in range(stage.accumulation_steps):
-                    model_in = model_in_template.clone()
+                for _ in range(stage.accumulation_steps):
+                    if pool:
+                        model_in = pool.sample(stage.batch_size)
+                    else:
+                        model_in = model_in_template.clone()
+                    
+                    steps = self._get_steps()
                     
                     if self.config.use_mixed_precision and self.config.device == 'cuda':
                         with autocast('cuda'):
-                            result = self.model(model_in, steps=self.config.steps_per_epoch)
+                            result = self.model(model_in, steps=steps)
                             loss = F.mse_loss(result[:, :4], target_batch)
                             loss = loss / stage.accumulation_steps
                         self.scaler.scale(loss).backward()
                     else:
-                        result = self.model(model_in, steps=self.config.steps_per_epoch)
+                        result = self.model(model_in, steps=steps)
                         loss = F.mse_loss(result[:, :4], target_batch)
                         loss = loss / stage.accumulation_steps
                         loss.backward()
+                    
+                    if pool:
+                        pool.update(result)
                     
                     accumulated_loss += loss.item()
                 
@@ -245,7 +197,7 @@ class ProgressiveTrainer:
                     tqdm.write(f"[{stage.size}x{stage.size}] Epoch {epoch}: Loss = {accumulated_loss:.6f}")
                 
                 if self.config.checkpoint_interval > 0 and epoch > 0 and epoch % self.config.checkpoint_interval == 0:
-                    self._save_periodic_checkpoint(stage.size, epoch)
+                    self._save_checkpoint(stage.size, epoch, is_periodic=True)
         
         except KeyboardInterrupt:
             print(f"\nInterrupted at stage {stage.size}x{stage.size}, epoch {current_epoch}. Saving...")
@@ -253,64 +205,78 @@ class ProgressiveTrainer:
             raise
         
         return losses
-    
-    def _save_checkpoint(self, size: int, epoch: int = None, interrupted: bool = False):
-        """Save model and animation at current state (end of stage or interrupt)."""
-        suffix = f"_interrupted_epoch{epoch}" if interrupted else ""
-        model_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_model.pt"
-        self.save_model(str(model_path))
-        
-        temp_config = Config(
-            target_size=size,
-            device=self.config.device,
-            channel_n=self.config.channel_n
-        )
-        scaled_positions = self._scale_positions(size) if self.seed_positions else None
-        seed = create_seed(temp_config, positions=scaled_positions)
-        frames = self.model.generate_frames(seed, self.config.animation_steps)
-        
-        from .visualization import save_animation
-        gif_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_animation.gif"
-        save_animation(frames, str(gif_path))
-        print(f"Checkpoint saved: {model_path.name}, {gif_path.name}")
-    
-    def _save_periodic_checkpoint(self, size: int, epoch: int):
-        """Save model periodically during training."""
-        checkpoint_dir = self.output_dir / "checkpoints"
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        path = checkpoint_dir / f"{self.base_name}_{size}x{size}_epoch{epoch}_model.pt"
-        self.save_model(str(path))
-    
+
     def train(self, verbose: bool = True):
         """
-        Run full progressive training through all resolution stages.
-        
-        Returns dict mapping resolution -> losses
+        Run training pipeline.
+        If progressive_stages are defined in config, runs progressive training.
+        Otherwise, runs single-stage training based on config parameters.
         """
-        print(f"Progressive Training Pipeline")
+        print(f"Training Pipeline")
         print(f"Device: {self.config.device}")
         print(f"Mixed Precision: {self.config.use_mixed_precision}")
-        print(f"Stages: {[s.size for s in self.config.progressive_stages]}")
+        
+        stages = self.config.progressive_stages
+        if not stages:
+            # Create a single stage from base config
+            stages = [ResolutionStage(
+                size=self.config.target_size,
+                epochs=self.config.n_epochs,
+                batch_size=self.config.batch_size,
+                accumulation_steps=1
+            )]
+            print("Mode: Single Resolution")
+        else:
+            print(f"Mode: Progressive {[s.size for s in stages]}")
         
         current_lr = self.config.lr
         
-        for i, stage in enumerate(self.config.progressive_stages):
+        for i, stage in enumerate(stages):
+            # Decay LR for subsequent stages in progressive mode
             if i > 0:
                 current_lr = current_lr * 0.5
             
             losses = self.train_stage(stage, lr=current_lr, verbose=verbose)
             self.all_losses[stage.size] = losses
             
-            self._save_checkpoint(stage.size)
+            # Save checkpoint at end of stage
+            self._save_checkpoint(stage.size, stage.epochs, is_periodic=False)
             
             if self.config.device == 'cuda':
                 torch.cuda.empty_cache()
         
         print(f"\n{'='*60}")
-        print("Progressive training complete!")
+        print("Training complete!")
         print(f"{'='*60}")
         
         return self.all_losses
+    
+    def _save_checkpoint(self, size: int, epoch: int, interrupted: bool = False, is_periodic: bool = False):
+        """Save model and animation."""
+        if is_periodic:
+            checkpoint_dir = self.output_dir / "checkpoints"
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            path = checkpoint_dir / f"{self.base_name}_{size}x{size}_epoch{epoch}_model.pt"
+            self.save_model(str(path))
+            return
+
+        suffix = f"_interrupted_epoch{epoch}" if interrupted else ""
+        model_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_model.pt"
+        self.save_model(str(model_path))
+        
+        # Generate and save animation
+        temp_config = Config(
+            target_size=size,
+            device=self.config.device,
+            channel_n=self.config.channel_n
+        )
+        scaled_positions = self._scale_positions(size)
+        seed = create_seed(temp_config, positions=scaled_positions)
+        frames = self.model.generate_frames(seed, self.config.animation_steps)
+        
+        gif_path = self.output_dir / f"{self.base_name}_{size}x{size}{suffix}_animation.gif"
+        save_animation(frames, str(gif_path))
+        print(f"Checkpoint saved: {model_path.name}, {gif_path.name}")
     
     def save_model(self, path):
         torch.save({
