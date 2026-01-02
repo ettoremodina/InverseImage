@@ -29,3 +29,41 @@ def draw_line(img: np.ndarray, x1: int, y1: int, x2: int, y2: int, color: list):
         if e2 < dx:
             err += dx
             y1 += sy
+
+
+def get_time_dilated_indices(num_source_frames: int, num_target_frames: int, 
+                             initial_repeats: float, decay_rate: float) -> np.ndarray:
+    """
+    Calculate indices for resampling frames with time dilation (slow start).
+    
+    Args:
+        num_source_frames: Number of available source frames
+        num_target_frames: Number of frames in the output video
+        initial_repeats: Relative weight of the first frame
+        decay_rate: Decay rate for weight of subsequent frames
+        
+    Returns:
+        Array of indices (integers) of length num_target_frames
+    """
+    if num_source_frames == 0:
+        return np.zeros(num_target_frames, dtype=int)
+        
+    # Calculate weight (duration) for each source frame
+    indices = np.arange(num_source_frames)
+    weights = initial_repeats * (decay_rate ** indices)
+    
+    # Calculate cumulative weight (time)
+    cumulative_weights = np.cumsum(weights)
+    total_weight = cumulative_weights[-1]
+    
+    # Map target frames to source frames
+    # Target times are evenly spaced from 0 to total_weight
+    target_times = np.linspace(0, total_weight, num_target_frames)
+    
+    # Find which source frame corresponds to each target time
+    # searchsorted finds the first index where cumulative_weight >= target_time
+    resampled_indices = np.searchsorted(cumulative_weights, target_times)
+    
+    # Clip to valid range
+    return np.clip(resampled_indices, 0, num_source_frames - 1)
+

@@ -10,7 +10,7 @@ AttractorPlacement = Literal['random', 'edge']
 
 @dataclass
 class SCAConfig:
-    mask_image_path: str = 'images/Vale_Ettore.png'
+    mask_image_path: str = 'images/Brini.png'
 
     num_attractors: int = 10000
     attractor_placement: AttractorPlacement = 'edge'

@@ -12,7 +12,7 @@ class NCAConfig:
     hidden_size: int = 128
     update_rate: float = 0.5
 
-    image_path: str = 'images/Vale_Ettore.png'
+    image_path: str = 'images/Brini.png'
     target_size: int = 128
     target_padding: int = 16
 

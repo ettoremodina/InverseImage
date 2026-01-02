@@ -25,7 +25,7 @@ class PipelineConfig:
     """
     
     # ==================== MAIN SETTING ====================
-    target_image: str = 'images/Vale_Ettore.png'
+    target_image: str = 'images/Brini.png'
     output_base: str = 'outputs'
     
     # ==================== SUB-CONFIGS ====================
@@ -37,17 +37,17 @@ class PipelineConfig:
     
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
-    seed_positions_path: Optional[str] = "outputs/sca/Vale_Ettore_seeds.json"
+    seed_positions_path: Optional[str] = "outputs/sca/Brini_seeds.json"
     
     # Combined animation settings
-    total_video_duration_seconds: float = 10.0
+    total_video_duration_seconds: float = 20.0
     sca_percentage: float = 0.4  # 40% of video for SCA growth
     nca_percentage: float = 0.6  # 60% of video for NCA growth
     
     # Animation
     animation_steps: int = 100
     animation_fps: int = 20
-    render_size: int = 1024
+    render_size: int = 512
     render_fps: int = 20
     
     # ==================== MISC ====================
@@ -74,8 +74,8 @@ class PipelineConfig:
         self.nca_render.output_width = self.render_size
         self.nca_render.output_height = self.render_size
         
-        self.sca_render.output_width = self.render_size * 4 # High res for SCA
-        self.sca_render.output_height = self.render_size * 4
+        self.sca_render.output_width = self.render_size 
+        self.sca_render.output_height = self.render_size
     
     # ==================== DERIVED PATHS ====================
     @property

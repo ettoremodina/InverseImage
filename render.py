@@ -82,7 +82,7 @@ def render_nca(pipeline):
     nca_render_config = NCARenderConfig(
         output_width=pipeline.render_size,
         output_height=pipeline.render_size,
-        cell_shape="circle",
+        cell_shape="square",
         cell_scale=1.0
     )
     renderer = NCARenderer(nca_render_config)

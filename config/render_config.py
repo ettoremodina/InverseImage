@@ -7,8 +7,8 @@ from typing import Tuple
 
 @dataclass
 class SCARenderConfig:
-    output_width: int = 1024
-    output_height: int = 1024
+    output_width: int = 512
+    output_height: int = 512
     background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     
     branch_color: Tuple[float, float, float, float] = (0.35, 0.20, 0.10, 1.0)
@@ -24,14 +24,18 @@ class SCARenderConfig:
 
 @dataclass
 class NCARenderConfig:
-    output_width: int = 1024
-    output_height: int = 1024
+    output_width: int = 512
+    output_height: int = 512
     background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     
-    cell_shape: str = "circle"  # "circle", "square", "hexagon"
+    cell_shape: str = "square"  # "circle", "square", "hexagon"
     cell_scale: float = 1.0  # multiplier for cell size (1.0 = cells touch)
     alpha_threshold: float = 0.1  # cells below this alpha are not drawn
     
-    temporal_smoothing: float = 0.5  # 0.0 = no smoothing, 0.9 = heavy smoothing
+    temporal_smoothing: float = 0  # 0.0 = no smoothing, 0.9 = heavy smoothing
+    
+    # Frame persistence / Time dilation
+    initial_repeats: int = 5  # Relative duration of first frame
+    decay_rate: float = 0.99     # < 1.0 means early frames last longer (slow start)
     
     antialiasing: bool = True
