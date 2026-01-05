@@ -137,15 +137,18 @@ def sample_attractors(
     return sample_attractors_random(mask, num_attractors)
 
 
-def find_bottom_center(mask: np.ndarray) -> Vector2D:
-    """Find the bottom-center point of the mask for root placement."""
+def find_random_start(mask: np.ndarray) -> Vector2D:
+    """
+    Find a random valid starting point strictly inside the mask.
+    """
     ys, xs = np.where(mask)
     
-    max_y = np.max(ys)
-    bottom_xs = xs[ys == max_y]
-    center_x = np.mean(bottom_xs)
+    if len(ys) == 0:
+        # Fallback to image center if mask is empty
+        return Vector2D(mask.shape[1] / 2, mask.shape[0] / 2)
     
-    return Vector2D(center_x, max_y)
+    idx = np.random.randint(len(ys))
+    return Vector2D(float(xs[idx]), float(ys[idx]))
 
 
 def get_mask_dimensions(mask: np.ndarray) -> Tuple[int, int]:

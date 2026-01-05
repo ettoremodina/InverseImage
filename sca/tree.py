@@ -14,7 +14,7 @@ from .vector import Vector2D
 from .attractor import Attractor
 from .branch import Branch
 from .spatial import BranchSpatialIndex
-from .mask import load_mask, sample_attractors, find_bottom_center, get_mask_dimensions
+from .mask import load_mask, sample_attractors, find_random_start, get_mask_dimensions
 from .profiling import profile, profile_block
 
 
@@ -45,7 +45,7 @@ class Tree:
         self.attractors = [Attractor(pos) for pos in attractor_positions]
         
         if self.config.root_pos is None:
-            root_pos = find_bottom_center(self.mask)
+            root_pos = find_random_start(self.mask)
         else:
             root_pos = Vector2D(*self.config.root_pos)
         

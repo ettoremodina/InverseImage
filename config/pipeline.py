@@ -25,7 +25,7 @@ class PipelineConfig:
     """
     
     # ==================== MAIN SETTING ====================
-    target_image: str = 'images/Brini.png'
+    target_image: str = 'images/jellyfish.png'
     output_base: str = 'outputs'
     
     # ==================== SUB-CONFIGS ====================
@@ -37,7 +37,7 @@ class PipelineConfig:
     
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
-    seed_positions_path: Optional[str] = "outputs/sca/Brini_seeds.json"
+    seed_positions_path: Optional[str] = None
     
     # Combined animation settings
     total_video_duration_seconds: float = 20.0
@@ -61,6 +61,10 @@ class PipelineConfig:
         if self.random_seed is not None:
             np.random.seed(self.random_seed)
             
+        # Automate seed positions path if not provided
+        if self.seed_positions_path is None:
+            self.seed_positions_path = str(self.sca_seeds_path)
+
         # Propagate shared settings to sub-configs
         self.nca.image_path = self.target_image
         self.nca.output_dir = str(self.nca_output_dir)
