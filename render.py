@@ -194,7 +194,8 @@ def merge_videos(pipeline, video_paths: list, output_path: str):
         fps = caps[0].get(cv2.CAP_PROP_FPS)
         
         remove_if_exists(output_path)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # Use H.264 codec for better compatibility (WhatsApp, social media, etc.)
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264 codec
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
         for i, cap in enumerate(caps):

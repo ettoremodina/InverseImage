@@ -71,6 +71,92 @@ def visualize_tree(
     return fig, ax
 
 
+def visualize_tree_with_seeds(
+    tree: Tree,
+    seed_positions: List[Tuple[int, int]],
+    target_size: int,
+    show_mask: bool = True,
+    branch_color: str = 'saddlebrown',
+    branch_width: float = 1.0,
+    seed_color: str = 'red',
+    seed_size: float = 20.0,
+    figsize: Tuple[int, int] = (16, 16),
+    save_path: Optional[str] = None
+):
+    """
+    Visualize tree with seed positions overlaid.
+    
+    Args:
+        tree: Grown SCA tree
+        seed_positions: List of (x, y) seed positions in NCA grid coordinates
+        target_size: NCA grid size used for seed extraction
+        show_mask: Show the mask in background
+        branch_color: Color for tree branches
+        branch_width: Width of branch lines
+        seed_color: Color for seed points
+        seed_size: Size of seed markers
+        figsize: Figure size
+        save_path: Path to save the visualization
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    if show_mask:
+        ax.imshow(tree.mask, cmap='gray', alpha=0.2, origin='upper')
+    
+    # Draw branches
+    segments = [
+        [(b.start_pos.x, b.start_pos.y), (b.end_pos.x, b.end_pos.y)]
+        for b in tree.branches
+    ]
+    
+    if segments:
+        lc = LineCollection(segments, colors=branch_color, linewidths=branch_width)
+        ax.add_collection(lc)
+    
+    # Convert seed positions back to mask coordinates for visualization
+    mask_w, mask_h = tree.mask_width, tree.mask_height
+    scale_x = mask_w / target_size
+    scale_y = mask_h / target_size
+    
+    seed_positions_mask = []
+    for x, y in seed_positions:
+        mask_x = x * scale_x
+        mask_y = y * scale_y
+        seed_positions_mask.append((mask_x, mask_y))
+    
+    if seed_positions_mask:
+        seed_array = np.array(seed_positions_mask)
+        ax.scatter(
+            seed_array[:, 0], 
+            seed_array[:, 1],
+            c=seed_color, 
+            s=seed_size, 
+            alpha=0.8,
+            edgecolors='darkred',
+            linewidths=1.0,
+            marker='o',
+            label=f'Seeds ({len(seed_positions)})'
+        )
+        ax.legend(loc='upper right')
+    
+    ax.set_xlim(0, mask_w)
+    ax.set_ylim(mask_h, 0)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title(f'SCA Tree with {len(seed_positions)} Seed Positions', fontsize=14, pad=10)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight', 
+                    facecolor='white', edgecolor='none')
+        print(f"Saved tree with seeds visualization to {save_path}")
+    
+    plt.show()
+    return fig, ax
+
+
 def animate_growth(
     config: SCAConfig,
     interval: int = 50,

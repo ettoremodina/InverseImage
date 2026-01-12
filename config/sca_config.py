@@ -14,6 +14,7 @@ class SCAConfig:
 
     num_attractors: int = 10000
     attractor_placement: AttractorPlacement = 'edge'
+    edge_threshold: float = 0.1  # Lower values = more edges detected (0-1 scale)
     influence_radius: float = 50.0
     kill_distance: float = 1.0
     growth_step: float = 1.0
@@ -22,8 +23,17 @@ class SCAConfig:
     min_attractors_per_branch: int = 2
 
     root_pos: Optional[Tuple[float, float]] = None
-    max_iterations: int = 800
+    max_iterations: int = 2000  # Increased for sparse attractor cases
     stagnation_limit: int = 100
+    
+    # Adaptive growth for sparse attractors
+    adaptive_influence: bool = True  # Increase influence radius when stagnating
+    influence_growth_rate: float = 1.1  # Multiply influence radius by this on stagnation
+    max_influence_radius: float = 200.0  # Maximum influence radius
+    
+    # Stopping criteria based on attractor coverage
+    min_attractor_kill_ratio: float = 0.95  # Stop if 95% of attractors are killed
+    enable_attractor_stopping: bool = True  # Use attractor ratio as stopping criterion
     
     # Seed extraction
     seed_mode: str = 'tips'  # 'tips' or 'all'

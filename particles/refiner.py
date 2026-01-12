@@ -411,7 +411,8 @@ def generate_particle_animation(nca_final_frame, target_image, steps, width, hei
     refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor, radius=radius, spawn_duration=spawn_duration, device=device, background_image=background_image)
     
     # Setup video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    # Use H.264 codec for better compatibility
+    fourcc = cv2.VideoWriter_fourcc(*'avc1')
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     
     print(f"Rendering {steps} particle frames...")

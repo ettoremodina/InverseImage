@@ -150,5 +150,6 @@ class SCARenderer(Renderer):
         
         frames.append(self.render_frame(data, max_depth_limit=None, time=time))
         
-        imageio.mimsave(output_path, frames, fps=fps)
+        # Use H.264 codec for better compatibility
+        imageio.mimsave(output_path, frames, fps=fps, codec='libx264', quality=8)
         print(f"  Saved animation: {output_path}")

@@ -163,12 +163,8 @@ class CombinedRenderer(Renderer):
                 rendered_frames.append(final_frame)
                 time += dt
         
-        imageio.mimsave(output_path, rendered_frames, fps=fps)
-        print(f"Saved combined animation: {output_path}")
-        print(f"  Total frames: {len(rendered_frames)} (SCA: {sca_frames}, NCA: {nca_frames})")
-        print(f"  Duration: {len(rendered_frames) / fps:.2f}s at {fps} fps")
-        
-        imageio.mimsave(output_path, rendered_frames, fps=fps)
+        # Use H.264 codec for better compatibility
+        imageio.mimsave(output_path, rendered_frames, fps=fps, codec='libx264', quality=8)
         print(f"Saved combined animation: {output_path}")
         print(f"  Total frames: {len(rendered_frames)} (SCA: {sca_frames}, NCA: {nca_frames})")
         print(f"  Duration: {len(rendered_frames) / fps:.2f}s at {fps} fps")

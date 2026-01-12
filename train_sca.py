@@ -19,7 +19,7 @@ from pathlib import Path
 
 from config import load_config
 from sca import Tree, SCAConfig, visualize_tree, extract_seed_positions
-from sca.visualization import plot_growth_statistics
+from sca.visualization import plot_growth_statistics, visualize_tree_with_seeds
 from sca.mask import save_edge_visualization
 from rendering.exporters import export_sca_data
 
@@ -61,6 +61,15 @@ def main():
         max_seeds=pipeline.sca.max_seeds
     )
     pipeline.save_seed_positions(seed_positions)
+    
+    # Visualize tree with seed positions
+    seeds_viz_path = str(pipeline.sca_output_dir / f'{pipeline.image_name}_tree_with_seeds.png')
+    visualize_tree_with_seeds(
+        tree,
+        seed_positions,
+        pipeline.nca.target_size,
+        save_path=seeds_viz_path
+    )
 
     metadata = {
         'image_path': pipeline.target_image,

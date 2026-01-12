@@ -48,7 +48,7 @@ def save_combined_animation(sca_frames: list, nca_frames: list, save_path: str, 
     print(f"Saved combined GIF ({len(sca_frames)} SCA + {len(nca_frames)} NCA frames) to {save_path}")
     
     mp4_path = str(Path(save_path).with_suffix('.mp4'))
-    imageio.mimsave(mp4_path, [np.array(f) for f in all_frames], fps=fps)
+    imageio.mimsave(mp4_path, [np.array(f) for f in all_frames], fps=fps, codec='libx264', quality=8)
     print(f"Saved combined MP4 to {mp4_path}")
 
 
@@ -66,7 +66,7 @@ def save_frames_as_gif(frames: list, save_path: str, fps: int = 20):
     print(f"Saved GIF ({len(pil_frames)} frames) to {save_path}")
     
     mp4_path = str(Path(save_path).with_suffix('.mp4'))
-    imageio.mimsave(mp4_path, [np.array(f) for f in pil_frames], fps=fps)
+    imageio.mimsave(mp4_path, [np.array(f) for f in pil_frames], fps=fps, codec='libx264', quality=8)
     print(f"Saved MP4 to {mp4_path}")
 
 

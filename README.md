@@ -123,3 +123,12 @@ python render.py --mode particles
 # OR: Render the full growth process (SCA -> NCA -> Particles)
 python render.py --mode combined
 ```
+
+---
+
+## 📚 References & Inspiration
+
+This project is heavily inspired by the groundbreaking work on differentiable self-organizing systems:
+
+*   **[Growing Neural Cellular Automata](https://distill.pub/2020/growing-ca/)** (Mordvintsev et al., Distill, 2020) - The primary source for the NCA implementation.
+

@@ -215,7 +215,7 @@ class NCARenderer(Renderer):
             for _ in range(repeats):
                 final_frames.append(frame)
         
-        imageio.mimsave(output_path, final_frames, fps=fps)
+        imageio.mimsave(output_path, final_frames, fps=fps, codec='libx264', quality=8)
         print(f"Saved animation: {output_path}")
     
     def save_frame(self, frame: np.ndarray, source_width: int, source_height: int, 

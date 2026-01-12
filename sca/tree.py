@@ -29,6 +29,8 @@ class Tree:
         self.mask_width: int = 0
         self.mask_height: int = 0
         self._stagnation_counter: int = 0
+        self._initial_attractor_count: int = 0
+        self._current_influence_radius: float = config.influence_radius
         
         self._initialize()
     
@@ -40,9 +42,11 @@ class Tree:
             self.mask, 
             self.config.num_attractors,
             method=self.config.attractor_placement,
-            image_path=self.config.mask_image_path
+            image_path=self.config.mask_image_path,
+            edge_threshold=self.config.edge_threshold
         )
         self.attractors = [Attractor(pos) for pos in attractor_positions]
+        self._initial_attractor_count = len(self.attractors)
         
         if self.config.root_pos is None:
             root_pos = find_random_start(self.mask)
@@ -72,7 +76,7 @@ class Tree:
         """
         Use KDTree batch query for O(n log m) instead of O(n*m).
         """
-        influence_radius = self.config.influence_radius
+        influence_radius = self._current_influence_radius
         kill_distance = self.config.kill_distance
         
         tips = self.spatial_index.tips
@@ -209,6 +213,13 @@ class Tree:
         if not self.attractors:
             return False
         
+        # Check attractor-based stopping criterion
+        if self.config.enable_attractor_stopping:
+            attractors_killed = self._initial_attractor_count - len(self.attractors)
+            kill_ratio = attractors_killed / self._initial_attractor_count if self._initial_attractor_count > 0 else 0
+            if kill_ratio >= self.config.min_attractor_kill_ratio:
+                return False
+        
         if self._stagnation_counter >= self.config.stagnation_limit:
             return False
         
@@ -229,6 +240,15 @@ class Tree:
         attractor_count_after = len(self.attractors)
         if attractor_count_after == attractor_count_before:
             self._stagnation_counter += 1
+            # Adaptive influence: increase radius when stagnating
+            if self.config.adaptive_influence and len(self.attractors) > 0:
+                old_radius = self._current_influence_radius
+                self._current_influence_radius = min(
+                    self._current_influence_radius * self.config.influence_growth_rate,
+                    self.config.max_influence_radius
+                )
+                if self._stagnation_counter % 10 == 0:  # Log occasionally
+                    print(f"  Adaptive growth: influence radius {old_radius:.1f} -> {self._current_influence_radius:.1f}")
         else:
             self._stagnation_counter = 0
         
@@ -257,11 +277,19 @@ class Tree:
                 print(f"  Iteration {self.iteration}: {len(self.branches)} branches, "
                       f"{len(self.attractors)} attractors remaining")
         
+        attractors_killed = self._initial_attractor_count - len(self.attractors)
+        kill_ratio = attractors_killed / self._initial_attractor_count if self._initial_attractor_count > 0 else 0
+        
         if self._stagnation_counter >= self.config.stagnation_limit:
             print(f"Growth stopped due to stagnation (no attractors died for {self.config.stagnation_limit} iterations)")
+        if self.config.enable_attractor_stopping and kill_ratio >= self.config.min_attractor_kill_ratio:
+            print(f"Growth stopped: reached target kill ratio ({kill_ratio:.1%} >= {self.config.min_attractor_kill_ratio:.1%})")
+        
         print(f"Growth complete after {self.iteration} iterations")
         print(f"  Final branches: {len(self.branches)}")
+        print(f"  Attractors killed: {attractors_killed}/{self._initial_attractor_count} ({kill_ratio:.1%})")
         print(f"  Remaining attractors: {len(self.attractors)}")
+        print(f"  Final influence radius: {self._current_influence_radius:.1f}")
         
         return self.iteration
     

@@ -25,7 +25,7 @@ class PipelineConfig:
     """
     
     # ==================== MAIN SETTING ====================
-    target_image: str = 'images/jellyfish.png'
+    target_image: str = 'images/fedemor.jpeg'
     output_base: str = 'outputs'
     
     # ==================== SUB-CONFIGS ====================
