@@ -39,7 +39,7 @@ class TimingConfig:
     hold: float = 3.0              # final stillness, only the sway breathing
 
     sca: StageWindow = field(default_factory=lambda: StageWindow(0.0, 7.0, 'ease_out'))
-    nca: StageWindow = field(default_factory=lambda: StageWindow(3.0, 16.0, 'ease_in_out'))
+    nca: StageWindow = field(default_factory=lambda: StageWindow(2.0, 16.0, 'ease_in_out'))
     swarm: StageWindow = field(default_factory=lambda: StageWindow(12.0, 22.0, 'linear'))
     scaffold_fade: StageWindow = field(
         default_factory=lambda: StageWindow(10.0, 18.0, 'ease_in_out'))

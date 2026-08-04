@@ -63,6 +63,67 @@ I tre insieme fanno una **ricerca locale distribuita**: la posizione dice *dove*
 mutazione dice *cosa provare*, il feromone dice *dove serve gente*. Nessuno dei tre
 conosce il target.
 
+### 2.1 Cosa evolve, cosa no, e perché non serve un cervello
+
+Va detto senza ambiguità, perché è la cosa che si fraintende più facilmente guardando il
+ciclo di §5: **gli agenti non hanno un cervello.** Non c'è policy, non c'è rete, non c'è
+nessuna regola di decisione che vari da individuo a individuo. La regola di moto è
+cablata e identica per tutti, e **un carattere che non varia non può essere selezionato**:
+nella versione base il comportamento è una costante di specie, non un tratto individuale.
+
+Quello che evolve è due cose, e sono di natura diversa.
+
+**Il colore evolve in senso pieno.** Eredità, mutazione, selezione differenziale. In una
+regione dove il target è un arancio `(L .72, a .08, b .12)` e l'NCA ha lasciato uno
+slavato `(.70, .04, .06)`:
+
+| | gene | esito |
+| --- | --- | --- |
+| capostipite | `(.70, .04, .06)` | depone il colore già presente → guadagno ≈ 0 → dimagrisce |
+| figlio | `(.71, .06, .09)` | mutazione fortunata: avvicina il canvas → mangia → si riproduce |
+| altro figlio | `(.73, .12, .18)` | ha esagerato: peggiora → perde energia → muore |
+| nipote | `(.72, .07, .11)` | ci siamo |
+
+Nessuna derivata, nessuna lettura di `target[y, x]`. Lo sciame ha **misurato** il colore
+locale del target per tentativi e morte. È una `(1+λ)` indipendente per ogni regione
+dell'immagine, e converge in una decina o poche decine di generazioni per regione — il
+che, a `reproduction_threshold` tipici, spiega perché servano migliaia di step di
+simulazione e giustifica la decisione di §8 (simulare lungo, accelerare in riproduzione).
+
+**La posizione si eredita ma non è un'abilità.** Il figlio nasce dove sta il genitore con
+un jitter: si trasmette *con mutazione*, esattamente come il colore. Il genoma effettivo
+non è di 3 numeri ma di **5** — `(x, y, L, a, b)` — e lo sciame fa una risalita locale in
+cinque dimensioni. Conseguenza pratica: `birth_jitter` **è un parametro di ricerca**, non
+un dettaglio estetico; è il tasso di mutazione della coordinata spaziale.
+
+Ma il carattere selezionato è *il posto*, non la capacità di trovarlo. Nessun individuo
+diventa più bravo a cercare: è la popolazione che finisce nei posti giusti, perché chi sta
+nei posti sbagliati muore. È dinamica di popolazione, non intelligenza. E la scoperta di
+zone nuove, nella versione base, non è nemmeno evolutiva — è affidata al jitter di
+nascita, al feromone e alla fame, che di genetico non hanno niente.
+
+### 2.2 Il limite invalicabile, e l'unica scappatoia
+
+Sognare cervelli più grossi serve a poco, per una ragione strutturale: **i sensori non
+vedono l'errore.** Nemmeno una rete neurale per agente potrebbe imparare "vai dove ci
+sono gli sbagli", perché quell'informazione non le arriva. Potrebbe imparare al massimo
+a evitare la folla o a restare sul tessuto.
+
+Con un'eccezione, ed è l'unica strada per rendere efficiente il *singolo* invece della
+popolazione: un agente non può vedere l'errore, ma **può sentire la propria energia**.
+Sapere "sto mangiando o no" non gli dice dov'è la risposta, gli dice solo se ciò che ha
+appena fatto ha funzionato. La regola che ne discende è §5.2b.
+
+La linea di demarcazione col barare, formulata in modo che regga a ogni estensione futura:
+
+> **Leggere l'errore nello spazio è barare** — vedo dove sbaglio *prima* di andarci: è
+> `guidance`.
+> **Leggere la propria energia nel tempo è legittimo** — so solo se quello che ho fatto
+> è andato bene.
+
+Il secondo è lo stesso canale di veto che usa già la selezione. Cambia soltanto la scala
+temporale: l'apprendimento passa da *fra le generazioni* a *dentro la vita del singolo*.
+
 ---
 
 ## 3. Cosa mangia lo sciame — `DECISO`
@@ -142,6 +203,7 @@ una regressione.
 per ogni step:
     5.1  percezione        (legge pheromone, nutrient — mai error)
     5.2  rotazione
+    5.2b propriocezione    (run-and-tumble sul proprio gain — non sul campo)
     5.3  avanzamento
     5.4  deposito          -> canvas, pheromone      [modifica il quadro]
     5.5  consumo           -> energy                 [l'unico punto col target]
@@ -183,7 +245,9 @@ distribuisce la fame.
 **Nota di principio:** qui è dove va messo `guidance` se un giorno lo si vuole
 assaggiare — `A += guidance · error`. A `guidance = 0` (default) gli agenti sono ciechi
 al proprio errore. Ogni valore > 0 è un passo verso il barare, ed è esposto solo per
-poter *misurare* quanto costa l'onestà.
+poter *misurare* quanto costa l'onestà. È **lettura spaziale** dell'errore, quindi cade
+dal lato sbagliato della linea di §2.2 — a differenza della propriocezione di §5.2b, che
+cade da quello giusto.
 
 ---
 
@@ -202,6 +266,54 @@ La scelta proporzionale non è cosmetica: lo stadio 3 deve produrre **pennellate
 rotazione a scatti del Physarum canonico produce filamenti spezzati. Il flag per il
 classico resta perché su `fitness_scale` grossolani il look nervoso potrebbe essere
 esattamente quello che serve.
+
+---
+
+### 5.2b Propriocezione — *run and tumble*
+
+Il pezzo che rende efficiente il **singolo agente** invece della sola popolazione. Senza
+di questo, nessun individuo cerca: si limita a stare dove è nato (§2.1).
+
+L'agente non vede l'errore, ma ricorda quanto ha mangiato allo step precedente. È
+sufficiente per la strategia di ricerca dei batteri — la chemiotassi di *E. coli*:
+
+> **Se sto mangiando vado dritto; se non sto mangiando giro a caso.**
+
+```
+# gain viene calcolato in 5.5, quindi qui si guardano i due step già conclusi
+Δ = gain_i[t−1] − gain_i[t−2]                  # sto andando sempre meglio?
+se Δ < tumble_threshold:
+    θ += 𝒰(−tumble_angle, +tumble_angle)       # tumble: virata casuale ampia
+altrimenti:
+    (rotazione normale di 5.2)                 # run: prosegui
+```
+
+Il ritardo di uno step è ininfluente — è lo stesso che ha il batterio, che confronta la
+concentrazione di adesso con quella di un attimo fa.
+
+Due righe. L'agente non sa dove sia il cibo: allunga le corse nelle direzioni che pagano
+e le accorcia in quelle che non pagano. È una stima del gradiente per differenze finite
+lungo la propria traiettoria, **senza mai calcolare un gradiente e senza mai vedere il
+campo**. Non serve memoria: basta conservare `gain` dello step precedente, un tensore
+`(N,)` in più.
+
+Perché è legittimo: usa solo `gain_i`, cioè quanto *l'agente stesso* ha guadagnato. È
+lettura temporale della propria riuscita, non lettura spaziale della soluzione — il lato
+buono della linea di §2.2. È lo stesso canale di veto della selezione, spostato dentro la
+vita del singolo.
+
+| Alternativa | Effetto | Verdetto |
+| --- | --- | --- |
+| ★ Run-and-tumble su `Δgain` | ricerca individuale vera, gratis, non barante | attivare fin dal lab, dietro `tumble_enabled` |
+| Su `gain` assoluto invece che su `Δ` | più semplice, ma un agente in zona buona ma satura continua dritto all'infinito | no |
+| Media mobile di `gain` su k step | meno rumoroso, reagisce più tardi | flag, se il segnale a un solo step risulta troppo sporco |
+| Modulazione della `speed` invece della virata | l'agente rallenta dove mangia invece di girare: si sofferma, deposita di più. Effetto visivo diverso e forse migliore | vale un confronto in `compare` |
+
+**Il punto per cui è decisivo:** finché i suoi parametri (`tumble_threshold`,
+`tumble_angle`) sono costanti di configurazione, questa resta una strategia di specie.
+Quando passeranno nel genoma comportamentale (§14.1) diventeranno ereditabili — **e solo
+allora i figli saranno letteralmente più bravi a cercare del genitore.** È il pezzo che
+chiude il cerchio fra i due livelli di §2.1.
 
 ---
 
@@ -720,8 +832,15 @@ Nessuna di queste va scritta finché §5 non funziona e non è tarata.
 
 ### 14.1 Genoma comportamentale — la pennellata che si specializza
 
-Il gene porta anche `speed`, `sensor_angle`, `sensor_distance`, `deposit_alpha` e
-`brush_radius`. Conseguenza: **regioni diverse evolvono pennellate diverse**. Le punte
+Il gene porta anche `speed`, `sensor_angle`, `sensor_distance`, `deposit_alpha`,
+`brush_radius` e **i due parametri di run-and-tumble** (§5.2b). Questi ultimi sono i più
+interessanti dei sette, perché sono gli unici che riguardano la *strategia di ricerca*:
+finché sono costanti di config, cercare bene è una dote di specie; da ereditabili in poi,
+**i figli diventano davvero più bravi a trovare cibo del genitore** — il che è l'unico
+modo di chiudere il divario descritto in §2.1 fra evoluzione del colore (vera) ed
+evoluzione della posizione (solo demografia).
+
+Conseguenza sull'aspetto: **regioni diverse evolvono pennellate diverse**. Le punte
 dei tentacoli premiano agenti sottili e veloci, la campana agenti larghi e lenti.
 Specializzazione emergente della pennellata, senza averla scritta da nessuna parte — ed è
 la sola strada per cui il quadro finale ha una *mano* diversa in punti diversi.
@@ -752,6 +871,23 @@ gratis e collassa tutta la popolazione su quel fenotipo.
 - **Crossover** (§5.8) — poco promettente su un gene di 3 numeri, diventa sensato solo
   col genoma comportamentale.
 
+### 14.3 Neuroevoluzione — valutata e scartata
+
+L'idea naturale una volta capito §2.1: dare a ogni agente una micro-rete (3 input → 4
+nascosti → 2 output), i pesi come genoma, ~30 numeri da evolvere. Il cervello vero.
+
+**Scartata, e per un motivo strutturale, non per prudenza.** Il collo di bottiglia non è
+la rete, sono gli input: un agente riceve solo feromone, nutriente e il proprio `gain`.
+Con tre canali non c'è quasi niente da imparare che il run-and-tumble di §5.2b non faccia
+già in due righe — e le poche politiche in più che una rete potrebbe esprimere ("evita la
+folla", "rallenta sul tessuto denso") sono più economiche come termini espliciti nei
+sensori. In cambio lo spazio di ricerca passa da 5 a ~35 dimensioni e chiede migliaia di
+generazioni che non abbiamo.
+
+Registrata qui perché la conclusione è utile anche in negativo: **in questa architettura
+il limite non è la capacità di calcolo degli agenti, è quanto poco possono percepire.** E
+percepire di più significa avvicinarsi a `guidance`, cioè al barare.
+
 ---
 
 ## 15. Parametri di regia
@@ -770,6 +906,8 @@ partenza proposto per §11, non un valore tarato.
 | `mutation_sigma` | ampiezza dell'esplorazione | | più varietà cromatica, convergenza più lenta |
 | `sensor_angle` / `sensor_distance` | forma delle tracce | | reti larghe e ramificate vs filamenti stretti |
 | `rotation_angle` | reattività della virata | | tracce nervose vs curve ampie |
+| `tumble_enabled` / `tumble_threshold` / `tumble_angle` | ricerca individuale (§5.2b) | on | l'agente si intestardisce meno e cambia zona prima |
+| `birth_jitter` | **tasso di mutazione della posizione** (§2.1) | piccolo | stirpi che esplorano invece di radicarsi; a 0 i territori si fossilizzano |
 | `evaporation` | memoria del feromone | | tracce persistenti e ordinate vs sciame nervoso |
 | `population_cap` / `min_population` | densità e pavimento | `4096` / ~5% | copertura veloce vs rada e "disegnata" |
 | `gain_scale`, `cost_life`, `cost_deposit` | il metabolismo | | vedi §5.6 |
@@ -792,6 +930,8 @@ Le cinque domande aperte, chiuse.
 | 3 | Cristallizzazione | **Mai.** Processo idealmente infinito: vita del colore inversamente proporzionale all'errore, con `λ_min > 0` che non azzera mai il ricambio (§5.9). |
 | 4 | Spazio colore | **OKLab**, per geni, distanze, blending e decadimento (§10). |
 | 5 | `fitness_scale` | **Fedele** (`1`, errore a piena risoluzione di lavoro) come punto di partenza. |
+| — | Propriocezione | **Aggiunta** dopo la revisione: run-and-tumble sul proprio `gain` (§5.2b). Costa due righe ed è l'unica cosa che rende efficiente il singolo agente invece della sola popolazione (§2.1). Legittima perché legge il tempo, non lo spazio (§2.2). |
+| — | Cervello / neuroevoluzione | **Scartata** (§14.3): il limite non è la capacità di calcolo degli agenti ma quanto poco possono percepire, e percepire di più è barare. |
 | — | Integrazione | **Isolata prima.** Laboratorio con immagine di test, bassa risoluzione, pochi agenti, GPU opzionale, prima di collegare gli stadi 1 e 2 (§11). |
 | — | Durata | `sim_steps` e `fps` indipendenti: si simula lungo e si accelera in riproduzione (§8). |
 
