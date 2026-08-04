@@ -2,9 +2,18 @@ numpy>=1.21.0
 scipy>=1.7.0
 matplotlib>=3.5.0
 Pillow>=9.0.0
-torch>=1.10.0
 imageio>=2.31.0
 imageio-ffmpeg>=0.4.8
 opencv-python>=4.8.0
 pycairo>=1.24.0
 tqdm>=4.65.0
+
+# PyTorch. On Windows the plain PyPI wheel is CPU-ONLY -- installing it here
+# would silently give you a CPU build and `torch.cuda.is_available()` == False.
+# Install it separately from the PyTorch index, choosing the CUDA build your
+# driver supports (see docs/USAGE.md):
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+#
+# CPU-only is fine for rendering; training the NCA on CPU is slow.
+torch>=1.10.0

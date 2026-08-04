@@ -6,8 +6,8 @@
   "influence_radius": 50.0,
   "kill_distance": 1.0,
   "growth_step": 1.0,
-  "num_branches": 102286,
-  "iterations": 401,
+  "num_branches": 125843,
+  "iterations": 497,
   "num_seeds": 1000,
   "render_data_path": "outputs\\sca\\jellyfish_render_data.json",
   "seeds_path": "outputs\\sca\\jellyfish_seeds.json"

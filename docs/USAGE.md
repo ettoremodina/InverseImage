@@ -19,6 +19,40 @@ pip install -r requirements.txt
 Device selection is automatic (`config/common.py:get_device`): MPS → CUDA → CPU.
 Training on CPU works but is slow; rendering is CPU-bound either way.
 
+### GPU (CUDA) on Windows
+
+**The `torch` wheel on PyPI is CPU-only for Windows.** `pip install torch` there
+gives you a working install where `torch.cuda.is_available()` is `False`, with no
+error to tell you why. The CUDA builds live on a separate index:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+```
+
+Pick the CUDA build your **driver** supports — not the CUDA toolkit version
+`nvcc --version` reports, which is irrelevant here since PyTorch ships its own
+runtime. Check with `nvidia-smi`:
+
+| Driver | Use |
+| --- | --- |
+| ≥ 527 | `cu126` — safe default, and the widest range of torch versions |
+| ≥ 570 | `cu128` |
+| ≥ 580 | `cu130` |
+
+Verify afterwards:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+A `+cpu` suffix in the version means you got the wrong wheel. If you already
+installed the CPU build, `pip uninstall torch` first — pip will not replace it on
+its own, because the plain version requirement is already satisfied.
+
+Make sure you are installing into the **same interpreter** you run the pipeline
+with. `python` on PATH is often not your virtualenv; `python -c "import sys;
+print(sys.executable)"` tells you which one you are actually using.
+
 ---
 
 ## 2. The single control point: `config/pipeline.py`

@@ -56,6 +56,16 @@ We don't just display the pixels. We treat the NCA output as a **flow field**.
     pip install -r requirements.txt
     ```
 
+3.  **Install PyTorch with GPU support** (optional, but training is slow without it)
+
+    On Windows the PyPI `torch` wheel is **CPU-only**. Install the CUDA build from
+    the PyTorch index instead — pick the one your driver supports:
+    ```bash
+    pip install torch --index-url https://download.pytorch.org/whl/cu126
+    ```
+    Check it worked: `python -c "import torch; print(torch.cuda.is_available())"`.
+    See [docs/USAGE.md](docs/USAGE.md) for the driver/CUDA compatibility table.
+
 ---
 
 ## 🛠️ Usage
