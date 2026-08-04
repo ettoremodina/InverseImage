@@ -12,10 +12,15 @@ import json
 import numpy as np
 
 from .common import get_device
+from .camera_config import CameraConfig
+from .grading_config import GradingConfig
 from .nca_config import NCAConfig
+from .palette_config import PaletteConfig
 from .sca_config import SCAConfig
-from .render_config import SCARenderConfig, NCARenderConfig
+from .render_config import SCARenderConfig, NCARenderConfig, ScaffoldFadeConfig
 from .particle_config import ParticleConfig
+from .seeding_config import ProgressiveSeedingConfig
+from .timing_config import TimingConfig
 
 @dataclass
 class PipelineConfig:
@@ -23,38 +28,53 @@ class PipelineConfig:
     Unified configuration for the NCA-SCA pipeline.
     All output paths are derived from target_image.
     """
-    
+
     # ==================== MAIN SETTING ====================
     target_image: str = 'images/jellyfish.png'
     output_base: str = 'outputs'
-    
+
     # ==================== SUB-CONFIGS ====================
     nca: NCAConfig = field(default_factory=NCAConfig)
     sca: SCAConfig = field(default_factory=SCAConfig)
     sca_render: SCARenderConfig = field(default_factory=SCARenderConfig)
     nca_render: NCARenderConfig = field(default_factory=NCARenderConfig)
     particles: ParticleConfig = field(default_factory=ParticleConfig)
-    
+
+    palette: PaletteConfig = field(default_factory=PaletteConfig)
+    grading: GradingConfig = field(default_factory=GradingConfig)
+    camera: CameraConfig = field(default_factory=CameraConfig)
+    timing: TimingConfig = field(default_factory=TimingConfig)
+    scaffold: ScaffoldFadeConfig = field(default_factory=ScaffoldFadeConfig)
+    seeding: ProgressiveSeedingConfig = field(default_factory=ProgressiveSeedingConfig)
+
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
     seed_positions_path: Optional[str] = None
-    
-    # Combined animation settings
+
+    # Legacy combined animation settings (mode 'combined').
+    # The timeline mode ignores these and uses `timing` instead.
     total_video_duration_seconds: float = 20.0
     sca_percentage: float = 0.4  # 40% of video for SCA growth
     nca_percentage: float = 0.6  # 60% of video for NCA growth
-    
+
     # Animation
     animation_steps: int = 100
     animation_fps: int = 20
     render_size: int = 512
     render_fps: int = 20
-    
+
+    # Everything is drawn on a canvas `render_supersample` times the video size
+    # and reduced with an area average: real antialiasing, thin SCA branches
+    # that stop shimmering, soft cell edges. 1 = disabled.
+    # The camera crop shares this same canvas -- there is never a second
+    # enlargement (PLAN b, 3.5).
+    render_supersample: int = 2
+
     # ==================== MISC ====================
     device: str = None
     log_interval: int = 100
     random_seed: Optional[int] = None
-    
+
     def __post_init__(self):
         if not Path(self.target_image).exists():
             raise FileNotFoundError(
@@ -80,13 +100,54 @@ class PipelineConfig:
         self.sca.mask_image_path = self.target_image
         self.sca.output_dir = str(self.sca_output_dir)
         self.sca.random_seed = self.random_seed
-        
-        self.nca_render.output_width = self.render_size
-        self.nca_render.output_height = self.render_size
-        
-        self.sca_render.output_width = self.render_size 
-        self.sca_render.output_height = self.render_size
-    
+
+        # Both renderers draw on the shared internal canvas; the reduction to
+        # `render_size` happens once, at the end of the frame.
+        canvas = self.canvas_size
+        for render_config in (self.nca_render, self.sca_render):
+            render_config.output_width = canvas
+            render_config.output_height = canvas
+            render_config.render_scale = float(max(1, self.render_supersample))
+
+        self.apply_palette()
+
+    # ==================== DERIVED RENDER GEOMETRY ====================
+    @property
+    def canvas_size(self) -> int:
+        """Side of the internal canvas every renderer draws on."""
+        return self.render_size * max(1, self.render_supersample)
+
+    def apply_palette(self):
+        """
+        Push the palette derived from the target image into the render configs.
+
+        This is the one place where the background colour is decided, so the two
+        hardcoded backgrounds of the old render_config can no longer drift apart
+        (PLAN d). Manual overrides in `palette` always win.
+        """
+        if not self.palette.enabled:
+            return
+
+        # Imported here: config must stay importable without the render stack.
+        from color.palette import background_color, resolve_palette, tree_colors
+
+        palette = resolve_palette(self.target_image, self.palette)
+        if palette is None:
+            return
+
+        background = background_color(palette, self.palette)
+        self.sca_render.background_color = background
+        self.nca_render.background_color = background
+
+        if self.palette.tree_from_palette:
+            base, tip = tree_colors(palette, self.palette)
+            self.sca_render.branch_color = base
+            self.sca_render.branch_color_end = tip
+
+        if self.grading.shadow_tint is None:
+            self.grading.shadow_tint = background[:3]
+
+
     # ==================== DERIVED PATHS ====================
     @property
     def image_name(self) -> str:

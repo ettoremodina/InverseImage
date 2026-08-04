@@ -54,18 +54,30 @@ class CAModel(nn.Module):
 
         return x
 
-    def forward(self, x, steps=1, update_rate=None):
-        for _ in range(steps):
+    def forward(self, x, steps=1, update_rate=None, hook=None):
+        """
+        Run `steps` updates.
+
+        `hook(x, step) -> x` is called before each step, with the step index.
+        It is what progressive seeding plugs into (see nca/seeding.py): the
+        state is mutable between two updates, so seeds can be lit up while the
+        automaton is already running.
+        """
+        for i in range(steps):
+            if hook is not None:
+                x = hook(x, i)
             x = self.step(x, update_rate=update_rate)
         return x
-    
-    def generate_frames(self, seed, steps, update_rate=None):
-        """Generate animation frames from seed."""
+
+    def generate_frames(self, seed, steps, update_rate=None, hook=None):
+        """Generate animation frames from seed, with the same optional hook."""
         x = seed.clone()
         frames = [torch.clamp(x[0, :4].detach().cpu().permute(1, 2, 0), 0, 1)]
-        
-        for _ in range(steps):
+
+        for i in range(steps):
+            if hook is not None:
+                x = hook(x, i)
             x = self.step(x, update_rate=update_rate)
             frames.append(torch.clamp(x[0, :4].detach().cpu().permute(1, 2, 0), 0, 1))
-        
+
         return frames

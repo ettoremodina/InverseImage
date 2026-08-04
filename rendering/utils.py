@@ -3,8 +3,9 @@ Rendering utility functions.
 """
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
+import cairo
 import imageio
 import numpy as np
 
@@ -31,6 +32,61 @@ def open_video_writer(output_path: str, fps: int):
         pixelformat=VIDEO_PIXELFORMAT,
         macro_block_size=1,
     )
+
+
+def create_surface(width: int, height: int,
+                   background=(0.0, 0.0, 0.0, 0.0),
+                   antialias: bool = True) -> Tuple[cairo.ImageSurface, cairo.Context]:
+    """
+    A Cairo surface painted with `background`, plus its context.
+
+    Shared by every renderer so surface creation, antialias policy and the
+    background fill live in exactly one place.
+    """
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(width), int(height))
+    ctx = cairo.Context(surface)
+
+    # ANTIALIAS_GOOD rather than BEST: on dense line work BEST costs
+    # noticeably more rasterisation time for no visible difference.
+    if antialias:
+        ctx.set_antialias(cairo.ANTIALIAS_GOOD)
+
+    r, g, b, a = background
+    ctx.set_source_rgba(r, g, b, a)
+    ctx.set_operator(cairo.OPERATOR_SOURCE)
+    ctx.paint()
+    ctx.set_operator(cairo.OPERATOR_OVER)
+
+    return surface, ctx
+
+
+def surface_to_numpy(surface: cairo.ImageSurface, width: int, height: int,
+                     unpremultiply: bool = False) -> np.ndarray:
+    """
+    Copy a Cairo ARGB32 surface into a uint8 RGBA array.
+
+    Cairo stores ARGB32 *premultiplied*. On an opaque surface that is a no-op,
+    but a transparent layer meant to be alpha-composited later must be
+    unpremultiplied first, or the alpha ends up applied twice and the layer
+    comes out dark at its soft edges.
+    """
+    surface.flush()
+    buf = surface.get_data()
+    arr = np.ndarray(shape=(int(height), int(width), 4), dtype=np.uint8, buffer=buf)
+
+    rgba = np.empty_like(arr)
+    rgba[:, :, 0] = arr[:, :, 2]  # R
+    rgba[:, :, 1] = arr[:, :, 1]  # G
+    rgba[:, :, 2] = arr[:, :, 0]  # B
+    rgba[:, :, 3] = arr[:, :, 3]  # A
+
+    if unpremultiply:
+        alpha = rgba[:, :, 3:4].astype(np.float32)
+        scale = np.where(alpha > 0, 255.0 / np.maximum(alpha, 1.0), 0.0)
+        straight = np.clip(rgba[:, :, :3].astype(np.float32) * scale, 0, 255)
+        rgba[:, :, :3] = straight.astype(np.uint8)
+
+    return rgba
 
 
 def load_rgb_image(path: str, background=(1.0, 1.0, 1.0)) -> np.ndarray:

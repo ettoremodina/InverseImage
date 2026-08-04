@@ -10,6 +10,8 @@ from typing import List, Dict, Any
 
 import numpy as np
 
+from .tree_weights import depths_from_parents, murray_weights
+
 
 def _simplify(points: np.ndarray, depths: np.ndarray, tolerance: float):
     """
@@ -73,8 +75,14 @@ def build_polylines(branches: List[Dict], tolerance: float = 0.5) -> List[Dict]:
     the tree progressively — and more smoothly than before, because a partly
     revealed segment is now interpolated instead of popping in whole.
 
+    A polyline also carries one `weight`: the Murray subtree weight of the
+    branch it comes from (see tree_weights.py). It is a single number because a
+    polyline by construction contains no branching, so the weight is constant
+    along it. The renderer stays stupid and fast: it just reads it.
+
     Returns a list of
-    {"points": [[x, y], ...], "depths": [int, ...], "is_tip": bool}.
+    {"points": [[x, y], ...], "depths": [int, ...], "is_tip": bool,
+     "weight": float}.
     """
     if not branches:
         return []
@@ -113,6 +121,7 @@ def build_polylines(branches: List[Dict], tolerance: float = 0.5) -> List[Dict]:
         consumed[i] = True
         points = [segment['start'], segment['end']]
         depths = [segment['depth'], segment['depth'] + 1]
+        weight = segment.get('weight', 1.0)
         current = segment
 
         while True:
@@ -127,7 +136,7 @@ def build_polylines(branches: List[Dict], tolerance: float = 0.5) -> List[Dict]:
             points.append(current['end'])
             depths.append(current['depth'] + 1)
 
-        polylines.append(_finish(points, depths, current['is_tip'], tolerance))
+        polylines.append(_finish(points, depths, current['is_tip'], tolerance, weight))
 
     # Anything left is part of a cycle; emit it as a standalone polyline so no
     # geometry is silently dropped.
@@ -138,12 +147,14 @@ def build_polylines(branches: List[Dict], tolerance: float = 0.5) -> List[Dict]:
                 [segment['depth'], segment['depth'] + 1],
                 segment['is_tip'],
                 tolerance,
+                segment.get('weight', 1.0),
             ))
 
     return polylines
 
 
-def _finish(points: List, depths: List, is_tip: bool, tolerance: float) -> Dict:
+def _finish(points: List, depths: List, is_tip: bool, tolerance: float,
+            weight: float = 1.0) -> Dict:
     """Decimate one chain and package it as a serialisable polyline."""
     kept_points, kept_depths = _simplify(
         np.asarray(points, dtype=np.float64),
@@ -154,12 +165,16 @@ def _finish(points: List, depths: List, is_tip: bool, tolerance: float) -> Dict:
         "points": kept_points.tolist(),
         "depths": kept_depths.tolist(),
         "is_tip": bool(is_tip),
+        "weight": round(float(weight), 5),
     }
 
 
 def export_sca_data(tree, output_path: str, tolerance: float = 0.5):
     """
     Export SCA tree to JSON format for rendering.
+
+    Depth *and* Murray subtree weight are computed here, where the hierarchy is
+    still available; the renderer only reads them (PLAN f, implementation note).
 
     Format:
     {
@@ -168,28 +183,35 @@ def export_sca_data(tree, output_path: str, tolerance: float = 0.5):
         "polylines": [
             {
                 "points": [[x, y], ...],
-                "depth_start": int,   # depth of the first segment
-                "is_tip": bool
+                "depths": [int, ...],   # depth of each point
+                "is_tip": bool,
+                "weight": float         # subtree weight, 1 at the trunk
             }
         ]
     }
     """
-    def get_depth(branch) -> int:
-        depth = 0
-        current = branch
-        while current.parent is not None:
-            depth += 1
-            current = current.parent
-        return depth
+    index = {id(branch): i for i, branch in enumerate(tree.branches)}
+    parents = [
+        index.get(id(branch.parent), -1) if branch.parent is not None else -1
+        for branch in tree.branches
+    ]
+
+    # Branches are created parent-first, so the natural order already lists
+    # every parent before its children -- exactly what the depth pass wants,
+    # and its reverse is what the weight pass wants.
+    forward = np.arange(len(tree.branches))
+    depths = depths_from_parents(parents, forward)
+    weights = murray_weights(parents, forward[::-1])
 
     branches_data = [
         {
             "start": [branch.start_pos.x, branch.start_pos.y],
             "end": [branch.end_pos.x, branch.end_pos.y],
-            "depth": get_depth(branch),
+            "depth": int(depths[i]),
             "is_tip": branch.is_tip,
+            "weight": float(weights[i]),
         }
-        for branch in tree.branches
+        for i, branch in enumerate(tree.branches)
     ]
 
     polylines = build_polylines(branches_data, tolerance=tolerance)

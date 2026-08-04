@@ -11,8 +11,82 @@ from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
 from config.render_config import SCARenderConfig
+from utils.log import get_logger
 from .base import Renderer
+from .tree_weights import infer_weights_from_polylines
 from .utils import max_polyline_depth, open_video_writer
+
+logger = get_logger(__name__)
+
+
+def prune_tips(polylines: List[Dict], config: SCARenderConfig) -> List[Dict]:
+    """
+    Thin out the deepest tips (PLAN f).
+
+    The last levels of the SCA are a dense scribble: hundreds of twigs a few
+    points long, all at the same width, which is what turns the silhouette into
+    fuzz. The candidates are exactly those -- deep, short, and terminal; long
+    deep branches are real structure and are always kept.
+    """
+    if config.prune_tips <= 0 or not polylines:
+        return polylines
+
+    max_depth = max((p['depths'][-1] for p in polylines), default=1)
+    threshold = config.prune_depth_start * max_depth
+
+    rng = np.random.default_rng(config.prune_seed)
+    keep_roll = rng.random(len(polylines))
+
+    def is_scribble(polyline, i):
+        return (polyline.get('is_tip', False)
+                and polyline['depths'][-1] >= threshold
+                and len(polyline['points']) <= config.prune_max_points
+                and keep_roll[i] < config.prune_tips)
+
+    kept = [p for i, p in enumerate(polylines) if not is_scribble(p, i)]
+
+    logger.info('SCA: pruned %d of %d polylines (deep short tips past depth %.0f)',
+                len(polylines) - len(kept), len(polylines), threshold)
+    return kept
+
+
+def catmull_rom(points: np.ndarray, subdivisions: int) -> np.ndarray:
+    """
+    Catmull-Rom interpolation of one polyline.
+
+    SCA emits one segment per growth step, so what comes out is a chain of
+    straight pieces. Interpolating it turns the chain into an actual curve --
+    the difference between a plant and a wire diagram.
+
+    Returns the resampled points; the endpoints are preserved exactly.
+    """
+    n = len(points)
+    if n < 3 or subdivisions < 2:
+        return points
+
+    # Duplicate the ends so the first and last segments have control points.
+    padded = np.vstack([points[0], points, points[-1]])
+
+    p0 = padded[:-3]
+    p1 = padded[1:-2]
+    p2 = padded[2:-1]
+    p3 = padded[3:]
+
+    t = np.linspace(0.0, 1.0, subdivisions, endpoint=False).reshape(-1, 1, 1)
+    t2 = t * t
+    t3 = t2 * t
+
+    # Uniform Catmull-Rom basis (tension 0.5).
+    curve = 0.5 * (
+        (2.0 * p1)
+        + (-p0 + p2) * t
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+    )
+
+    # curve is [subdivisions, segments, 2] -> interleave into one polyline.
+    flat = curve.transpose(1, 0, 2).reshape(-1, 2)
+    return np.vstack([flat, points[-1]])
 
 
 class TreeGeometry:
@@ -22,44 +96,114 @@ class TreeGeometry:
     Every point of every polyline lives in one contiguous array, so the
     per-frame sway is a single numpy expression rather than a Python loop.
 
-    The polylines are also pre-split into `color_steps` depth bands. Colour and
-    width vary continuously with depth, so quantising depth lets every piece in
-    a band share one source colour and one line width — the whole band then
+    Each point also carries a `value` in [0, 1]: 0 at the trunk, 1 at the tips.
+    It drives both the colour and the width, and where it comes from is what
+    `branch_width_mode` selects:
+
+    - 'depth'   -> value = depth / max_depth (the old behaviour);
+    - 'subtree' -> value = 1 - Murray subtree weight, so width follows how much
+                   tree the branch carries rather than how far it is from the
+                   root (PLAN f).
+
+    The polylines are pre-split into `color_steps` bands of that value, so every
+    piece in a band shares one colour and one line width — the whole band then
     becomes a single Cairo path and a single stroke, which is what turns tens
     of thousands of strokes per frame into a few dozen.
+
+    `depths` stays separate and always drives the growth reveal: how the tree is
+    drawn changed, when each piece appears did not.
     """
 
-    __slots__ = ('x', 'y', 'depths', 'begins', 'ends', 'max_depth', 'band_pieces')
+    __slots__ = ('x', 'y', 'depths', 'values', 'begins', 'ends',
+                 'max_depth', 'band_pieces', 'color_steps')
 
-    def __init__(self, polylines: List[Dict], color_steps: int):
-        counts = [len(p['points']) for p in polylines]
-        offsets = np.zeros(len(polylines) + 1, dtype=np.int64)
+    def __init__(self, polylines: List[Dict], config: SCARenderConfig):
+        polylines = prune_tips(polylines, config)
+
+        self.color_steps = max(1, config.color_steps)
+        max_depth = max((p['depths'][-1] for p in polylines), default=1) or 1
+        weights = self._polyline_weights(polylines, config)
+
+        subdivisions = config.smoothing_subdivisions if config.branch_smoothing else 1
+
+        point_arrays, depth_arrays, value_arrays = [], [], []
+        for polyline, weight in zip(polylines, weights):
+            points = np.asarray(polyline['points'], dtype=np.float64)
+            depths = np.asarray(polyline['depths'], dtype=np.float64)
+
+            if subdivisions > 1 and len(points) >= 3:
+                smoothed = catmull_rom(points, subdivisions)
+                # Depth is resampled linearly: the reveal has to stay monotonic
+                # along the curve, and it already is a smooth quantity.
+                original_t = np.linspace(0.0, 1.0, len(points))
+                new_t = np.linspace(0.0, 1.0, len(smoothed))
+                depths = np.interp(new_t, original_t, depths)
+                points = smoothed
+
+            if config.branch_width_mode == 'subtree':
+                # Constant along the polyline: by construction it contains no
+                # branching, so it carries the same amount of tree throughout.
+                spread = weight ** config.branch_width_gamma
+                values = np.full(len(points), 1.0 - spread, dtype=np.float64)
+            else:
+                values = np.clip(depths / max_depth, 0.0, 1.0)
+
+            point_arrays.append(points)
+            depth_arrays.append(depths)
+            value_arrays.append(values)
+
+        counts = [len(p) for p in point_arrays]
+        offsets = np.zeros(len(counts) + 1, dtype=np.int64)
         np.cumsum(counts, out=offsets[1:])
         self.begins = offsets[:-1]
         self.ends = offsets[1:]
 
-        if polylines:
-            points = np.concatenate([np.asarray(p['points'], dtype=np.float64) for p in polylines])
-            self.depths = np.concatenate([np.asarray(p['depths'], dtype=np.int64) for p in polylines])
+        if point_arrays:
+            points = np.concatenate(point_arrays)
+            self.depths = np.concatenate(depth_arrays)
+            self.values = np.concatenate(value_arrays)
         else:
             points = np.zeros((0, 2))
-            self.depths = np.zeros(0, dtype=np.int64)
+            self.depths = np.zeros(0)
+            self.values = np.zeros(0)
 
         self.x = points[:, 0]
         self.y = points[:, 1]
-        self.max_depth = int(self.depths.max()) if len(self.depths) else 1
+        self.max_depth = float(self.depths.max()) if len(self.depths) else 1.0
 
-        self.band_pieces = self._split_into_bands(color_steps)
+        self.band_pieces = self._split_into_bands()
 
-    def _split_into_bands(self, color_steps: int) -> Dict[int, List[Tuple[int, int, int]]]:
-        """Cut every polyline where it crosses a depth-band boundary."""
-        band_size = self.band_size(color_steps)
+    def _polyline_weights(self, polylines: List[Dict], config: SCARenderConfig) -> np.ndarray:
+        """Murray subtree weight of every polyline, normalised to 1 at the trunk."""
+        if not polylines or config.branch_width_mode != 'subtree':
+            return np.ones(len(polylines))
+
+        if all('weight' in p for p in polylines):
+            weights = np.array([p['weight'] for p in polylines], dtype=np.float64)
+        else:
+            logger.info('SCA: render data carries no subtree weights, '
+                        'reconstructing them from the geometry')
+            weights = infer_weights_from_polylines(polylines)
+
+        return weights / max(float(weights.max()), 1e-9)
+
+    def _split_into_bands(self) -> Dict[int, List[Tuple[int, int, int]]]:
+        """
+        Cut every polyline where it crosses a value-band boundary.
+
+        In 'subtree' mode the value is constant along a polyline, so no cut ever
+        happens and each polyline lands whole in one band. In 'depth' mode the
+        value climbs along the polyline and this is what preserves the gradient
+        inside a long branch.
+        """
         bands: Dict[int, List[Tuple[int, int, int]]] = {}
+        top = self.color_steps - 1
 
         for i, (begin, end) in enumerate(zip(self.begins, self.ends)):
             if end - begin < 2:
                 continue
-            band_of = self.depths[begin:end] // band_size
+            band_of = np.clip(
+                (self.values[begin:end] * self.color_steps).astype(np.int64), 0, top)
             # Boundaries where the band changes; pieces overlap by one point so
             # consecutive bands stay visually joined.
             cuts = [0, *(np.flatnonzero(np.diff(band_of)) + 1), end - begin]
@@ -67,12 +211,14 @@ class TreeGeometry:
                 piece_end = min(b + 1, end - begin)
                 if piece_end - a < 2:
                     continue
-                bands.setdefault(int(band_of[a]), []).append((i, begin + a, begin + piece_end))
+                bands.setdefault(int(band_of[a]), []).append(
+                    (i, int(begin + a), int(begin + piece_end)))
 
         return bands
 
-    def band_size(self, color_steps: int) -> int:
-        return max(1, int(np.ceil((self.max_depth + 1) / max(1, color_steps))))
+    def band_value(self, band: int) -> float:
+        """Centre of a band, in [0, 1] -- the colour/width interpolation factor."""
+        return min(1.0, (band + 0.5) / self.color_steps)
 
     def __len__(self):
         return len(self.begins)
@@ -88,7 +234,7 @@ class SCARenderer(Renderer):
         """Build (and cache) the flattened geometry for a polyline set."""
         if self._cached_polylines is not polylines:
             self._cached_polylines = polylines
-            self._cached_geometry = TreeGeometry(polylines, self.config.color_steps)
+            self._cached_geometry = TreeGeometry(polylines, self.config)
         return self._cached_geometry
 
     def _swayed_coords(self, geom: TreeGeometry, scale_x: float, scale_y: float,
@@ -104,6 +250,9 @@ class SCARenderer(Renderer):
         if self.config.sway_magnitude <= 0:
             return geom.x * scale_x, y
 
+        # Sway is expressed in source units and only becomes pixels through
+        # scale_x below, so it is already independent of the internal render
+        # scale -- unlike the line widths, which are set in output pixels.
         t = geom.depths / geom.max_depth
         amplitude = self.config.sway_magnitude * (t * t)
         phase = time * self.config.sway_frequency + geom.depths * 0.2 + geom.y * 0.05
@@ -142,15 +291,22 @@ class SCARenderer(Renderer):
 
     def _draw_polylines(self, ctx: cairo.Context, geom: TreeGeometry,
                         scale_x: float, scale_y: float,
-                        max_depth_limit: int = None, time: float = 0.0):
-        """Stroke the tree, one batched path per depth band."""
-        if len(geom) == 0:
+                        max_depth_limit: int = None, time: float = 0.0,
+                        opacity: float = 1.0):
+        """
+        Stroke the tree, one batched path per value band.
+
+        `opacity` scales every band's alpha: it is how the scaffold dissolves
+        under the flesh (PLAN 3.4, 'time' mode).
+        """
+        if len(geom) == 0 or opacity <= 0.0:
             return
 
         r1, g1, b1, a1 = self.config.branch_color
         r2, g2, b2, a2 = self.config.branch_color_end
-        base_w = self.config.branch_base_width
-        tip_w = self.config.branch_tip_width
+        scale = self.config.render_scale
+        base_w = self.config.branch_base_width * scale
+        tip_w = self.config.branch_tip_width * scale
 
         ctx.set_line_cap(cairo.LINE_CAP_ROUND)
         ctx.set_line_join(cairo.LINE_JOIN_ROUND)
@@ -158,17 +314,14 @@ class SCARenderer(Renderer):
         x, y = self._swayed_coords(geom, scale_x, scale_y, time)
         visible_ends, fractions = self._visible_extent(geom, max_depth_limit)
 
-        band_size = geom.band_size(self.config.color_steps)
-        inv_max_depth = 1.0 / geom.max_depth if geom.max_depth > 0 else 0.0
-
         for band in sorted(geom.band_pieces):
-            t = min(1.0, (band + 0.5) * band_size * inv_max_depth)
+            t = geom.band_value(band)
 
             ctx.set_source_rgba(
                 r1 + (r2 - r1) * t,
                 g1 + (g2 - g1) * t,
                 b1 + (b2 - b1) * t,
-                a1 + (a2 - a1) * t,
+                (a1 + (a2 - a1) * t) * opacity,
             )
             ctx.set_line_width(base_w + (tip_w - base_w) * t)
 
@@ -215,13 +368,16 @@ class SCARenderer(Renderer):
 
         return self._surface_to_numpy(surface)
 
-    def save_frame(self, data: Dict[str, Any], output_path: str):
+    def save_frame(self, data: Dict[str, Any], output_path: str, resolve=None):
         frame = self.render_frame(data)
+        if resolve is not None:
+            frame = resolve(frame, 0)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         imageio.imwrite(output_path, frame)
 
     def render_animation(self, data: Dict[str, Any], output_path: str,
-                         fps: int = 30, duration_seconds: float = None):
+                         fps: int = 30, duration_seconds: float = None,
+                         resolve=None):
         """
         Render the growth animation by progressively revealing branches by depth.
 
@@ -231,6 +387,9 @@ class SCARenderer(Renderer):
             fps: Frames per second
             duration_seconds: Target video length. When omitted, one frame is
                 emitted per depth level, so the length follows the tree depth.
+            resolve: optional callable applied to each finished frame, used to
+                bring the supersampled canvas down to the video size and to run
+                the grading pass.
         """
         max_depth = max_polyline_depth(data['polylines'])
 
@@ -243,10 +402,11 @@ class SCARenderer(Renderer):
         time = 0.0
         dt = 1.0 / fps
 
-        print(f"Rendering {len(depths)} SCA frames...")
+        logger.info('Rendering %d SCA frames...', len(depths))
         with open_video_writer(output_path, fps) as writer:
-            for depth in tqdm(depths, desc="Rendering SCA frames"):
-                writer.append_data(self.render_frame(data, max_depth_limit=int(depth), time=time))
+            for i, depth in enumerate(tqdm(depths, desc="Rendering SCA frames")):
+                frame = self.render_frame(data, max_depth_limit=int(depth), time=time)
+                writer.append_data(frame if resolve is None else resolve(frame, i))
                 time += dt
 
-        print(f"  Saved animation: {output_path}")
+        logger.info('  Saved animation: %s', output_path)

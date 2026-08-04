@@ -8,10 +8,13 @@ Configuration is loaded from config/pipeline.json.
 All paths are derived from the target image name.
 
 Modes:
+    timeline  - Single overlapped timeline: SCA + NCA (+ swarm slot). The one
+                that implements PLAN 3.1-3.6. Default.
+    still     - One graded frame at a given time, for calibration
     nca       - Render NCA growth animation from trained model (single seed)
     sca       - Render SCA growth animation from metadata
     particles - Render Particle refinement animation (requires NCA output)
-    combined  - Render full pipeline: SCA -> NCA (seeded by SCA) -> Particles
+    combined  - Legacy sequential pipeline: SCA -> NCA -> Particles, concatenated
 """
 
 import argparse
@@ -25,13 +28,16 @@ from pathlib import Path
 import config.nca_config
 sys.modules['nca.config'] = config.nca_config
 
+import imageio
 import imageio_ffmpeg
 import numpy as np
 import torch
 
+from color.grading import Grader
 from config import load_config
 from nca import CAModel, Config as NCAConfig
 from nca.data import create_seed
+from nca.seeding import SeedSchedule
 from particles import generate_particle_animation
 from rendering import (
     export_nca_frames,
@@ -40,8 +46,33 @@ from rendering import (
     SCARenderer,
     NCARenderer,
     CombinedRenderer,
+    TimelineRenderer,
+    Camera,
+    resolve,
     load_rgb_image
 )
+from utils.log import get_logger
+
+logger = get_logger(__name__)
+
+
+def make_resolver(pipeline, total_frames: int = 1, animate_camera: bool = True):
+    """
+    The tail of every frame: camera crop, downscale to video size, grading.
+
+    One function for every stage, which is the point of PLAN g -- the three
+    stages stop looking like three different exports because they now leave the
+    pipeline through the same door.
+    """
+    grader = Grader(pipeline.grading)
+    camera = Camera(pipeline.camera, pipeline.canvas_size)
+
+    def resolve_frame(frame, index=0):
+        progress = index / max(1, total_frames - 1) if animate_camera else 0.0
+        cropped = resolve(frame, pipeline.render_size, camera.crop(progress))
+        return grader.apply(cropped)[..., :3]
+
+    return resolve_frame
 
 
 def remove_if_exists(path: str):
@@ -64,6 +95,129 @@ def load_nca_model(model_path: str, device: str = 'cuda'):
     return model, config
 
 
+def require_sca_artifacts(pipeline):
+    """Fail early and clearly when train_sca.py has not been run."""
+    if not pipeline.sca_render_data_path.exists():
+        raise FileNotFoundError(
+            f"SCA render data not found at {pipeline.sca_render_data_path}. "
+            f"Please run train_sca.py first."
+        )
+    if not pipeline.sca_seeds_path.exists():
+        raise FileNotFoundError(
+            f"SCA seed positions not found at {pipeline.sca_seeds_path}. "
+            f"Please run train_sca.py first."
+        )
+
+
+def generate_nca_frames(pipeline, sca_data, seed_positions, steps: int):
+    """
+    Run the NCA, optionally seeding it progressively (PLAN 3.2).
+
+    With `seeding.enabled` the seeds are not all written at t=0: each one is
+    injected when the tree has grown down to it, through the hook added to
+    `CAModel.generate_frames`. The model is untouched -- this is step 1 of the
+    plan, the experiment at fixed weights.
+    """
+    model, nca_config = load_nca_model(str(pipeline.nca_model_path), pipeline.device)
+
+    if pipeline.seeding.enabled and seed_positions:
+        schedule = SeedSchedule.from_sca(
+            seed_positions, sca_data, nca_config.target_size, steps, pipeline.seeding
+        )
+        state = schedule.initial_state(
+            nca_config.channel_n, nca_config.target_size, pipeline.device)
+        hook = schedule.inject
+    else:
+        state = create_seed(nca_config, positions=seed_positions)
+        hook = None
+
+    logger.info('Generating %d NCA frames...', steps)
+    with torch.no_grad():
+        frames = model.generate_frames(state, steps=steps, hook=hook)
+
+    npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
+    export_nca_frames(frames, npz_path)
+    return load_nca_frames(npz_path)
+
+
+def build_timeline(pipeline):
+    return TimelineRenderer(
+        sca_config=pipeline.sca_render,
+        nca_config=pipeline.nca_render,
+        timing=pipeline.timing,
+        camera_config=pipeline.camera,
+        grading_config=pipeline.grading,
+        scaffold_config=pipeline.scaffold,
+        output_size=pipeline.render_size,
+        fps=pipeline.render_fps,
+    )
+
+
+def render_timeline(pipeline, reuse_frames: bool = False):
+    """
+    The single overlapped timeline (PLAN 3.1-3.6).
+
+    Replaces the sequential 'combined' mode: one loop of frames, every stage
+    evaluated against its own window, no cut and no frozen background.
+
+    Stage 3 is not wired yet -- its window renders as a hold. It plugs in
+    through the `stages` argument of TimelineRenderer.render.
+    """
+    require_sca_artifacts(pipeline)
+
+    logger.info('Loading SCA data from %s...', pipeline.sca_render_data_path)
+    sca_data = load_sca_data(str(pipeline.sca_render_data_path))
+
+    with open(pipeline.sca_seeds_path, 'r') as f:
+        seed_positions = json.load(f)['positions']
+
+    npz_path = pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz'
+    if reuse_frames and npz_path.exists():
+        logger.info('Reusing NCA frames from %s', npz_path)
+        nca_data = load_nca_frames(str(npz_path))
+    else:
+        steps = max(pipeline.animation_steps,
+                    int(pipeline.timing.nca.duration * pipeline.render_fps))
+        nca_data = generate_nca_frames(pipeline, sca_data, seed_positions, steps)
+
+    output_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_timeline.mp4')
+    remove_if_exists(output_path)
+
+    build_timeline(pipeline).render(sca_data, nca_data, output_path)
+    logger.info('Saved timeline to %s', output_path)
+    return output_path
+
+
+def render_still(pipeline, time: float, reuse_frames: bool = True):
+    """
+    One graded frame at `time`, for calibration.
+
+    Tuning cellularity, lighting and grading on a video is a waste of minutes;
+    this renders the single frame the parameters are being judged on.
+    """
+    require_sca_artifacts(pipeline)
+
+    sca_data = load_sca_data(str(pipeline.sca_render_data_path))
+    with open(pipeline.sca_seeds_path, 'r') as f:
+        seed_positions = json.load(f)['positions']
+
+    npz_path = pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz'
+    if reuse_frames and npz_path.exists():
+        nca_data = load_nca_frames(str(npz_path))
+    else:
+        steps = max(pipeline.animation_steps,
+                    int(pipeline.timing.nca.duration * pipeline.render_fps))
+        nca_data = generate_nca_frames(pipeline, sca_data, seed_positions, steps)
+
+    frame = build_timeline(pipeline).render_still(sca_data, nca_data, time)
+
+    output_path = (pipeline.render_output_dir /
+                   f'{pipeline.image_name}_still_{time:.1f}s.png')
+    imageio.imwrite(str(output_path), frame)
+    logger.info('Saved still frame at t=%.1fs to %s', time, output_path)
+    return output_path
+
+
 def render_nca(pipeline):
     """Render high-quality NCA growth animation using Cairo (Single Seed)."""
     print(f"Loading NCA model from {pipeline.nca_model_path}...")
@@ -83,10 +237,13 @@ def render_nca(pipeline):
     data = load_nca_frames(npz_path)
     output_path = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
     remove_if_exists(output_path)
+
+    total_frames = int(round(pipeline.total_video_duration_seconds * pipeline.render_fps))
     renderer.render_animation(
         data, output_path,
         fps=pipeline.render_fps,
-        duration_seconds=pipeline.total_video_duration_seconds
+        duration_seconds=pipeline.total_video_duration_seconds,
+        resolve=make_resolver(pipeline, total_frames)
     )
 
     print(f"Saved animation to {output_path}")
@@ -109,14 +266,18 @@ def render_sca(pipeline):
 
     output_path = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
     remove_if_exists(output_path)
+
+    total_frames = int(round(pipeline.total_video_duration_seconds * pipeline.render_fps))
+    resolver = make_resolver(pipeline, total_frames)
     renderer.render_animation(
         sca_data, output_path,
         fps=pipeline.render_fps,
-        duration_seconds=pipeline.total_video_duration_seconds
+        duration_seconds=pipeline.total_video_duration_seconds,
+        resolve=resolver
     )
-    
+
     final_frame_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png')
-    renderer.save_frame(sca_data, final_frame_path)
+    renderer.save_frame(sca_data, final_frame_path, resolve=resolver)
 
     print(f"Saved animation to {output_path}")
     return sca_data
@@ -263,25 +424,33 @@ def render_combined(pipeline):
     
     combined_output = str(pipeline.render_combined_gif_path.with_suffix('.mp4'))
     remove_if_exists(combined_output)
+
+    resolver = make_resolver(pipeline, sca_frames + nca_frames)
     combined_renderer.render_animation(
-        sca_data, 
-        nca_data, 
-        combined_output, 
+        sca_data,
+        nca_data,
+        combined_output,
         fps=pipeline.render_fps,
         sca_frames=sca_frames,
-        nca_frames=nca_frames
+        nca_frames=nca_frames,
+        resolve=resolver
     )
 
     # 6. Get Final Frame for Particles Background
     print("\n7. Generating background for particles...")
     # Render the very last frame of the combined animation to use as background
-    # This ensures the SCA tree and NCA growth persist
+    # This ensures the SCA tree and NCA growth persist. It has to go through the
+    # same resolver as the video, or the particle clip would be at canvas
+    # resolution and the concat would fail.
     final_nca_frame = nca_data['frames'][-1]
-    final_combined_frame = combined_renderer.render_frame(
-        sca_data, 
-        nca_frame=final_nca_frame, 
-        max_depth_limit=None, 
-        time=(sca_frames + nca_frames) / pipeline.render_fps
+    final_combined_frame = resolver(
+        combined_renderer.render_frame(
+            sca_data,
+            nca_frame=final_nca_frame,
+            max_depth_limit=None,
+            time=(sca_frames + nca_frames) / pipeline.render_fps
+        ),
+        sca_frames + nca_frames - 1
     )
     
     # 7. Render Particles
@@ -297,23 +466,39 @@ def render_combined(pipeline):
 def main():
     parser = argparse.ArgumentParser(description="Render animations for the NCA-SCA pipeline.")
     parser.add_argument(
-        '--mode', 
-        type=str, 
-        choices=['nca', 'sca', 'particles', 'combined'], 
-        default='combined',
-        help='Rendering mode: nca, sca, particles, or combined (default: combined)'
+        '--mode',
+        type=str,
+        choices=['timeline', 'still', 'nca', 'sca', 'particles', 'combined'],
+        default='timeline',
+        help='Rendering mode (default: timeline). "combined" is the legacy '
+             'sequential pipeline.'
+    )
+    parser.add_argument(
+        '--time', type=float, default=None,
+        help='For --mode still: the instant to render, in seconds. '
+             'Defaults to the end of the NCA window.'
+    )
+    parser.add_argument(
+        '--reuse-frames', action='store_true',
+        help='Reuse the NCA frames already on disk instead of re-running the model.'
     )
     args = parser.parse_args()
 
     pipeline = load_config()
     pipeline.create_output_dirs()
-    
-    print(f"Rendering for: {pipeline.target_image}")
-    print(f"Output: {pipeline.render_output_dir}")
-    print(f"Mode: {args.mode}")
-    print()
 
-    if args.mode == 'nca':
+    logger.info('Rendering for: %s', pipeline.target_image)
+    logger.info('Output: %s', pipeline.render_output_dir)
+    logger.info('Mode: %s | canvas %dpx -> video %dpx (supersample %dx)',
+                args.mode, pipeline.canvas_size, pipeline.render_size,
+                pipeline.render_supersample)
+
+    if args.mode == 'timeline':
+        render_timeline(pipeline, reuse_frames=args.reuse_frames)
+    elif args.mode == 'still':
+        time = args.time if args.time is not None else pipeline.timing.nca.end
+        render_still(pipeline, time)
+    elif args.mode == 'nca':
         render_nca(pipeline)
     elif args.mode == 'sca':
         render_sca(pipeline)

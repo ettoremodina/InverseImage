@@ -21,6 +21,41 @@ tavolino — si implementano entrambe dietro un flag e si confrontano sul risult
 
 ---
 
+## Stato di implementazione
+
+Fasi 2 e 3 implementate (l'ordine è quello previsto in fondo al documento: lo sciame
+è l'ultimo pezzo e beneficia di tutto il resto).
+
+| Punto | Stato | Dove |
+| --- | --- | --- |
+| (a) celle come cellule | **fatto** | [rendering/cells.py](rendering/cells.py), `CellRenderConfig` |
+| (b) supersampling | **fatto** | [rendering/supersample.py](rendering/supersample.py), `render_supersample` |
+| (c) luce | **fatto** | [rendering/lighting.py](rendering/lighting.py), `LightingConfig` |
+| (d) sfondo scuro, unificato | **fatto** | `PipelineConfig.apply_palette` — un solo valore per entrambi i renderer |
+| (e) palette dall'immagine | **fatto** | [color/palette.py](color/palette.py), entrambe le regole di sfondo |
+| (f) qualità della linea | **fatto** | `branch_width_mode`, `branch_smoothing`, potatura; pesi Murray in [rendering/tree_weights.py](rendering/tree_weights.py) |
+| (g) grading condiviso | **fatto** | [color/grading.py](color/grading.py), un solo passaggio per ogni frame di ogni stadio |
+| (h) temporal_smoothing | **fatto** | 0.25 |
+| 3.1 timeline unica | **fatto** | [rendering/timeline.py](rendering/timeline.py), `--mode timeline` |
+| 3.2 semina progressiva | **fatto (passo 1)** | [nca/seeding.py](nca/seeding.py) + hook in `CAModel.forward`. Il passo 2 (retraining) si decide **guardando il render** |
+| 3.3 sovrapposizione NCA↔sciame | **aperto** | dipende dalla Fase 1; lo slot `swarm` nella timeline è già schedulato e vuoto |
+| 3.4 impalcatura che sfuma | **fatto** | `ScaffoldFadeConfig`, entrambe le modalità (`alpha` di default, `time` per confronto) |
+| 3.5 camera | **fatto** | [rendering/camera.py](rendering/camera.py), disattivabile |
+| 3.6 timing parametrico | **fatto** | [config/timing_config.py](config/timing_config.py), con `validate()` che protegge il vincolo di sovrapposizione |
+| Fase 1 — sciame | **da fare** | `swarm/` non esiste ancora; `particles/` resta in piedi nel percorso `--mode combined` |
+
+Due note di merito emerse implementando, non previste dal piano:
+
+1. **I pesi di Murray sono troppo schiacciati per essere usati grezzi.** Un albero con
+   qualche migliaio di foglie ha peso di tronco `sqrt(foglie)`, quindi il 90% dei rami
+   finisce a spessore di punta. Serve un `branch_width_gamma` che ridistribuisca —
+   è un rimappaggio visivo, la legge resta quella.
+2. **La camera non ha bisogno di una canvas più grande.** Ritaglia dentro la canvas
+   supersampled che i renderer già disegnano, e il ritaglio si risolve nella stessa
+   riduzione ad area che fa l'antialiasing: un solo ricampionamento, mai due.
+
+---
+
 ## FASE 1 — Il terzo stadio: sciame evolutivo
 
 ### Verdetto sulla diagnosi
@@ -35,8 +70,9 @@ tavolino — si implementano entrambe dietro un flag e si confrontano sul risult
 
 Prima formulazione: *"il target non si guarda a inference"*.
 
-La tua idea del "dio che punisce chi devia" usa il target proprio a inference — come
-**pressione selettiva**. Formalmente viola la regola di sopra, sostanzialmente no, e la
+La tua idea della **pressione evolutiva** che punisce chi devia usa il target proprio a
+inference — come **pressione selettiva**. Formalmente viola la regola di sopra,
+sostanzialmente no, e la
 distinzione va messa a verbale perché è il cuore concettuale dello stadio:
 
 > **Il target non può mai fornire un colore. Può solo giudicare.**
@@ -52,8 +88,11 @@ esattamente ciò che rende lo stadio 3 interessante:
 Chi guarda non vede il risultato di un addestramento: vede l'addestramento. È la
 risposta più forte possibile all'accusa iniziale di "gimmick".
 
-`DOMANDA` — confermi questa riformulazione come regola di progetto? Se sì, sostituisce
-la precedente e il resto della Fase 1 poggia su questa.
+`OK` — Regola di progetto confermata. Sostituisce la precedente; tutta la Fase 1 poggia
+su questa.
+
+> **Il design completo dello stadio 3 è in [Evolutionary_Swarm.md](docs/Evolutionary_Swarm.md).**
+> Qui sotto resta il riassunto operativo; il perché delle scelte sta lì.
 
 Variante severa disponibile in ogni momento (la registro perché è a costo quasi zero):
 la fitness calcolata sull'**output dell'NCA** invece che sul target. Lo stadio 3 non
@@ -114,8 +153,9 @@ lettera su due piani, e funzionano entrambi:
 
 - **agenti** — chi vive e chi si riproduce (sopra);
 - **depositi** — anche la pittura ha una vita: il colore che non corrisponde evapora
-  lentamente, quello che corrisponde si fissa. Il "dio" punisce anche la materia, non
-  solo chi la depone.
+  in fretta, quello che corrisponde dura a lungo — ma non si fissa mai del tutto
+  (Evolutionary_Swarm §5.9). La pressione evolutiva punisce anche la materia, non solo
+  chi la depone.
 
 Il secondo livello ha un effetto collaterale prezioso: **il canvas si autopulisce**.
 Sporco, aloni e tratti fuori posto svaniscono da soli — cioè il difetto visivo numero uno
@@ -129,9 +169,11 @@ solo corretto:
 - territori di colore che si formano e confinano lungo i bordi cromatici del soggetto;
 - lo sciame che **si dirada dove l'immagine è finita** e si addensa dove manca —
   emergente, nessuno lo programma;
-- fine naturale dell'animazione: a immagine completa non c'è più errore da mangiare, la
-  popolazione muore di fame e lo sciame si dissolve lasciando l'opera. Un finale, non un
-  taglio.
+- **niente estinzione**: il pigmento non cristallizza mai del tutto, quindi il quadro
+  consuma sé stesso lentamente e rigenera cibo. La popolazione si assesta su una squadra
+  di manutenzione invece di morire. Il finale torna a essere una scelta di regia, e in
+  cambio la sequenza è potenzialmente loopabile
+  ([Evolutionary_Swarm.md §7](docs/Evolutionary_Swarm.md)).
 
 #### Parametri di regia (tutti in config)
 
@@ -213,9 +255,10 @@ Controllo esplicito: `cellularity: float` (0 = superficie liscia, 1 = colonia ma
 `cellularity_curve` per decidere come scende nel tempo. A 0 si torna al comportamento
 attuale ma antialiasato.
 
-`DOMANDA` — la cellularità deve arrivare a **0 esatto** a fine crescita (superficie
-perfettamente liscia) o restare un residuo appena percepibile? Io propendo per un
-residuo minimo: a zero netto si perde il "vivo".
+`OK` — Deciso: a fine crescita la cellularità **non va a zero**, resta un residuo appena
+percettibile (`cellularity_floor`, ordine di 0.1). A zero netto la superficie diventa
+liscia e morta; il residuo minimo la tiene viva e, insieme alla luce del punto (c), la fa
+leggere come pelle.
 
 ### b) Supersampling — `OK`
 
@@ -405,9 +448,9 @@ Struttura proposta — ogni stadio ha inizio, fine e curva di easing, tutti in c
 | `scaffold_fade.start/end` | 10 → 18 s | l'albero si dissolve sotto la carne |
 | `hold` | 3 s | fermo finale col solo respiro del sway |
 
-Vincolo di coerenza da imporre in config: ogni `start` deve cadere prima della `end`
-dello stadio precedente, altrimenti le fasi tornano sequenziali e si perde tutto il
-lavoro di 3.1.
+Default confermati. Vincolo di coerenza da imporre in config: ogni `start` deve cadere
+prima della `end` dello stadio precedente, altrimenti le fasi tornano sequenziali e si
+perde tutto il lavoro di 3.1.
 
 I titoli/credits (già in [TODO.md](docs/TODO.md)) si agganciano qui, sui secondi finali.
 
@@ -433,9 +476,10 @@ nca/
 
 swarm/                 # stadio 3 — sostituisce particles/
   agents.py            # stato, percezione, movimento, deposito
-  selection.py         # metabolismo, morte, riproduzione, mutazione
-  fields.py            # feromone, nutriente, errore, evaporazione dei depositi
-  simulation.py        # il ciclo che li mette insieme
+  selection.py         # consumo, costi, morte, riproduzione, mutazione
+  fields.py            # feromone, nutriente, errore, invecchiamento del pigmento
+  simulation.py        # il ciclo, il clima, le metriche
+  lab.py               # suite di controllo: live / sweep / compare
 
 config/
   palette_config.py    # (d, e)
@@ -444,6 +488,10 @@ config/
   swarm_config.py      # (Fase 1)
   timing_config.py     # (3.6)
 ```
+
+`swarm/lab.py` è deliberatamente separato dalla pipeline: lo stadio 3 si tara **isolato**,
+su un'immagine di test e un surrogato dell'output NCA, prima di essere collegato agli
+altri due stadi ([Evolutionary_Swarm.md §11](docs/Evolutionary_Swarm.md)).
 
 `particles/` viene rimosso solo a sciame funzionante, non prima.
 
@@ -454,6 +502,10 @@ config/
 Da eseguire **tutto insieme** a revisione conclusa; l'ordine è di dipendenza, non di
 consegna.
 
+0. `swarm/` + `swarm/lab.py` **isolato** — Fase 1, motore e suite di controllo su
+   immagine di test. Non dipende da nient'altro (usa il surrogato dell'NCA) ed è il pezzo
+   con più incognite, quindi conviene che la taratura giri in parallelo al resto.
+   L'integrazione nella timeline resta al punto 7.
 1. `color/palette.py` + config sfondo — (d, e). Non dipende da niente e cambia subito la
    faccia del progetto.
 2. `rendering/supersample.py` + `cells.py` + `lighting.py` — (a, b, c, f, h).
@@ -463,18 +515,22 @@ consegna.
 5. `nca/seeding.py` + esperimento a modello invariato — (3.2). Decisione sul retraining
    **dopo** l'esperimento.
 6. Impalcatura che sfuma + camera — (3.4, 3.5).
-7. `swarm/` — Fase 1. Ultimo perché è il pezzo più grosso e perché beneficia di tutto
-   quanto sopra. Prima calibrazione su frame fermo, poi video.
+7. Integrazione dello sciame nella timeline — (3.3). Il motore arriva già tarato dal
+   punto 0; qui cambia solo la sorgente di `nutrient`, che diventa l'alpha dell'NCA al
+   frame corrente invece di un campo statico.
 8. Titoli e taratura finale dei tempi.
 
 ---
 
 ## Domande aperte da chiudere prima di partire
 
-1. **Fase 1** — confermi la regola riformulata (*"il target non fornisce colori, giudica
-   e basta"*) come principio di progetto?
-2. **Fase 2a** — la cellularità deve andare a 0 esatto a fine crescita, o lasciare un
-   residuo appena percettibile? (io: residuo minimo)
-3. **Fase 3.6** — i default della tabella tempi reggono come punto di partenza?
+Le tre domande di piano erano già chiuse: regola del target confermata, cellularità con
+residuo minimo, tempi confermati.
 
-Tutto il resto è deciso o coperto da flag.
+Anche le **cinque scelte di design dello stadio 3** sono chiuse — genoma di solo colore,
+clima variabile con costante come caso particolare, nessuna cristallizzazione,
+OKLab, `fitness_scale` fedele — più due decisioni di metodo: taratura isolata in
+laboratorio e durata simulata indipendente dalla durata vista. Dettaglio e motivazioni in
+[Evolutionary_Swarm.md §16](docs/Evolutionary_Swarm.md).
+
+**Niente resta aperto.** Tutto il resto è deciso o coperto da flag.

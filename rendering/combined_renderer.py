@@ -1,9 +1,14 @@
 """
-Combined SCA+NCA renderer.
+Combined SCA+NCA renderer -- LEGACY.
 
 Creates a single video where:
 1. SCA tree grows progressively by depth
 2. NCA cells grow on top of the final SCA tree (which remains in background)
+
+Superseded by `timeline.py`, which evaluates every stage at every frame instead
+of running them one after the other (PLAN 3.1). Kept until the evolutionary
+swarm replaces `particles/`, so the old sequential pipeline stays renderable and
+comparable.
 """
 
 import numpy as np
@@ -14,7 +19,7 @@ from typing import Dict, Any
 from config.render_config import SCARenderConfig, NCARenderConfig
 from .base import Renderer
 from .sca_renderer import SCARenderer
-from .nca_renderer import NCARenderer
+from .nca_renderer import NCARenderer, composite
 from .utils import get_time_dilated_indices, max_polyline_depth, open_video_writer
 
 
@@ -38,13 +43,7 @@ class CombinedRenderer(Renderer):
     
     def _composite(self, bg_img: np.ndarray, fg_img: np.ndarray) -> np.ndarray:
         """Alpha-composite the NCA layer over the SCA layer."""
-        alpha_fg = fg_img[..., 3:4].astype(np.float32) / 255.0
-
-        out = bg_img.astype(np.float32)
-        out[..., :3] = fg_img[..., :3] * alpha_fg + bg_img[..., :3] * (1.0 - alpha_fg)
-        out[..., 3] = 255
-
-        return out.astype(np.uint8)
+        return composite(bg_img, fg_img)
 
     def _cache_sca_metadata(self, sca_data: Dict[str, Any]):
         """Cache SCA metadata to avoid recomputation."""
@@ -76,10 +75,11 @@ class CombinedRenderer(Renderer):
         return sca_image
 
     def render_animation(self, sca_data: Dict[str, Any], nca_data: Dict[str, Any],
-                         output_path: str, fps: int, sca_frames: int, nca_frames: int):
+                         output_path: str, fps: int, sca_frames: int, nca_frames: int,
+                         resolve=None):
         """
         Render combined SCA->NCA animation.
-        
+
         Args:
             sca_data: SCA render data with branches
             nca_data: NCA frames data
@@ -87,6 +87,8 @@ class CombinedRenderer(Renderer):
             fps: Frames per second
             sca_frames: Number of frames for SCA growth phase
             nca_frames: Number of frames for NCA growth phase
+            resolve: optional per-frame callable (frame, index) -> frame, used to
+                crop/downscale the supersampled canvas and grade it
         """
         self._cache_sca_metadata(sca_data)
         
@@ -104,10 +106,9 @@ class CombinedRenderer(Renderer):
                 for i in tqdm(range(sca_frames), desc="SCA Phase"):
                     t_frac = i / max(sca_frames - 1, 1)
                     target_depth = int(t_frac * max_depth)
-                    writer.append_data(
-                        self.render_frame(sca_data, nca_frame=None,
-                                          max_depth_limit=target_depth, time=time)
-                    )
+                    frame = self.render_frame(sca_data, nca_frame=None,
+                                              max_depth_limit=target_depth, time=time)
+                    writer.append_data(frame if resolve is None else resolve(frame, total))
                     time += dt
                     total += 1
 
@@ -140,7 +141,8 @@ class CombinedRenderer(Renderer):
                             )
                         nca_fg = accumulated_nca_frame.astype(np.uint8)
 
-                    writer.append_data(self._composite(sca_bg, nca_fg))
+                    frame = self._composite(sca_bg, nca_fg)
+                    writer.append_data(frame if resolve is None else resolve(frame, total))
                     time += dt
                     total += 1
 

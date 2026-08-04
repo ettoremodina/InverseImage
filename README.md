@@ -100,20 +100,24 @@ python train_nca.py
 *   *Output*: `outputs/nca/` (Trained model .pt, training logs)
 
 ### 4. Render Final Animation
-Generate the final high-quality video combining all steps.
+Generate the final high-quality video. One timeline, stages overlapping: the texture
+enters while the skeleton is still growing, and the skeleton dissolves under it.
 ```bash
-python render.py --mode combined
+python render.py --mode timeline
 ```
-*   *Output*: `outputs/rendering/<name>_full_pipeline.mp4` (plus the intermediate `_combined.mp4` and `_particles.mp4`)
+*   *Output*: `outputs/rendering/<name>_timeline.mp4`
 
-Other modes render a single stage in isolation:
+Other modes:
 
 | Command | Renders | Output |
 | --- | --- | --- |
+| `python render.py --mode still --time 9` | one graded frame, for calibration | `<name>_still_9.0s.png` |
 | `python render.py --mode sca` | skeleton growth only | `<name>_sca.mp4` |
 | `python render.py --mode nca` | texture growth only (centre seed) | `<name>_nca.mp4` |
 | `python render.py --mode particles` | particle pass over existing NCA frames | `<name>_particles.mp4` |
-| `python render.py --mode combined` | the whole pipeline | `<name>_full_pipeline.mp4` |
+| `python render.py --mode combined` | legacy sequential pipeline, concatenated | `<name>_full_pipeline.mp4` |
+
+See [docs/Render_Pipeline.md](docs/Render_Pipeline.md) for how a frame is built.
 
 To tweak particle parameters without regenerating the NCA frames:
 ```bash
@@ -126,9 +130,11 @@ python run_particles.py
 
 *   `config/`: Centralized configuration for all algorithms.
 *   `sca/`: Space Colonization Algorithm logic (Tree, Branch, Attractor).
-*   `nca/`: Neural Cellular Automata model and training loop (PyTorch).
-*   `particles/`: Particle advection and flow field rendering.
-*   `rendering/`: Animation engines and exporters.
+*   `nca/`: Neural Cellular Automata model, training loop (PyTorch) and progressive seeding.
+*   `particles/`: Particle advection and flow field rendering (legacy stage 3).
+*   `rendering/`: Animation engines, the timeline, cells, lighting, camera, exporters.
+*   `color/`: Palette extraction from the reference image and the shared grading pass.
+*   `utils/`: Logging.
 *   `tools/`: Helper scripts (RGBA image painter, video splitter for docs assets).
 *   `docs/`: [Usage guide](docs/USAGE.md) and detailed explanations of the math and biology behind the code.
 
@@ -145,10 +151,10 @@ python train_sca.py
 # 2. Learn the texture growth
 python train_nca.py
 
-# 3. Render the particle animation
-python render.py --mode particles
+# 3. Render the full growth process, one overlapped timeline
+python render.py --mode timeline
 
-# OR: Render the full growth process (SCA -> NCA -> Particles)
+# OR: the legacy sequential pipeline (SCA -> NCA -> Particles, concatenated)
 python render.py --mode combined
 ```
 
