@@ -2,7 +2,7 @@
 Rendering Script
 
 Generates high-quality animations using Cairo-based renderers.
-Supports NCA, SCA, Particles, and combined SCA→NCA→Particles animations.
+Supports NCA, SCA, Particles, and combined SCA->NCA->Particles animations.
 
 Configuration is loaded from config/pipeline.json.
 All paths are derived from the target image name.
@@ -16,6 +16,8 @@ Modes:
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,7 +25,7 @@ from pathlib import Path
 import config.nca_config
 sys.modules['nca.config'] = config.nca_config
 
-import cv2
+import imageio_ffmpeg
 import numpy as np
 import torch
 
@@ -37,13 +39,10 @@ from rendering import (
     load_nca_frames,
     SCARenderer,
     NCARenderer,
-    NCARenderConfig,
-    SCARenderConfig,
-    CombinedRenderer
+    CombinedRenderer,
+    load_rgb_image
 )
 
-
-import os
 
 def remove_if_exists(path: str):
     """Remove file if it exists to ensure fresh write."""
@@ -78,19 +77,17 @@ def render_nca(pipeline):
     npz_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_nca_frames.npz')
     export_nca_frames(frames, npz_path)
 
-    print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
-    nca_render_config = NCARenderConfig(
-        output_width=pipeline.render_size,
-        output_height=pipeline.render_size,
-        cell_shape="square",
-        cell_scale=1.0
-    )
-    renderer = NCARenderer(nca_render_config)
-    
+    print(f"Rendering at {pipeline.render_size}x{pipeline.render_size}...")
+    renderer = NCARenderer(pipeline.nca_render)
+
     data = load_nca_frames(npz_path)
     output_path = str(pipeline.render_nca_gif_path.with_suffix('.mp4'))
     remove_if_exists(output_path)
-    renderer.render_animation(data, output_path, fps=pipeline.render_fps)
+    renderer.render_animation(
+        data, output_path,
+        fps=pipeline.render_fps,
+        duration_seconds=pipeline.total_video_duration_seconds
+    )
 
     print(f"Saved animation to {output_path}")
     return frames
@@ -108,15 +105,15 @@ def render_sca(pipeline):
     sca_data = load_sca_data(str(pipeline.sca_render_data_path))
 
     print(f"Rendering at {pipeline.render_size}x{pipeline.render_size} with Cairo...")
-    sca_render_config = SCARenderConfig(
-        output_width=pipeline.render_size,
-        output_height=pipeline.render_size
-    )
-    renderer = SCARenderer(sca_render_config)
-    
+    renderer = SCARenderer(pipeline.sca_render)
+
     output_path = str(pipeline.render_sca_gif_path.with_suffix('.mp4'))
     remove_if_exists(output_path)
-    renderer.render_animation(sca_data, output_path, fps=pipeline.render_fps)
+    renderer.render_animation(
+        sca_data, output_path,
+        fps=pipeline.render_fps,
+        duration_seconds=pipeline.total_video_duration_seconds
+    )
     
     final_frame_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_sca_final.png')
     renderer.save_frame(sca_data, final_frame_path)
@@ -141,16 +138,14 @@ def render_particles(pipeline, background_image=None):
     # nca_data is expected to be the frames array
     final_nca_frame = nca_data['frames'][-1]
 
-    # Load Target Image for color sampling
-    target_image_path = str(pipeline.target_image)
-    print(f"Loading target image for coloring: {target_image_path}")
-    target_img = cv2.imread(target_image_path)
-    if target_img is None:
-        raise FileNotFoundError(f"Target image not found at {target_image_path}")
+    # Load Target Image for color sampling, flattening transparency onto the
+    # same background the tree is rendered on.
+    print(f"Loading target image for coloring: {pipeline.target_image}")
+    target_img = load_rgb_image(
+        pipeline.target_image,
+        background=pipeline.sca_render.background_color[:3]
+    )
 
-    # Convert BGR to RGB
-    target_img = cv2.cvtColor(target_img, cv2.COLOR_BGR2RGB)
-    
     particle_output_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_particles.mp4')
     remove_if_exists(particle_output_path)
     
@@ -171,50 +166,51 @@ def render_particles(pipeline, background_image=None):
         stretch_factor=pipeline.particles.particle_stretch_factor,
         radius=pipeline.particles.particle_radius,
         device=pipeline.device,
-        background_image=background_image
+        background_image=background_image,
+        outline_width=pipeline.particles.particle_outline_width,
+        outline_color=pipeline.particles.particle_outline_color
     )
     
     return particle_output_path
 
 
-def merge_videos(pipeline, video_paths: list, output_path: str):
-    """Merge multiple video files into one."""
-    print(f"Merging {len(video_paths)} videos into {output_path}...")
-    
-    try:
-        caps = [cv2.VideoCapture(p) for p in video_paths]
-        
-        if not all(cap.isOpened() for cap in caps):
-            print("Error opening one or more video files for merging.")
-            return
+def merge_videos(video_paths: list, output_path: str):
+    """
+    Concatenate videos without re-encoding.
 
-        # Get properties from first video
-        width = int(caps[0].get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(caps[0].get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = caps[0].get(cv2.CAP_PROP_FPS)
-        
-        remove_if_exists(output_path)
-        # Use H.264 codec for better compatibility (WhatsApp, social media, etc.)
-        fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264 codec
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        
-        for i, cap in enumerate(caps):
-            print(f"  Appending video {i+1}/{len(caps)}...")
-            while True:
-                ret, frame = cap.read()
-                if not ret: break
-                out.write(frame)
-            cap.release()
-            
-        out.release()
+    Every clip in the pipeline is written by the same libx264 settings
+    (rendering/utils.py), so ffmpeg's concat demuxer can copy the streams
+    straight through: no generation loss, no bitrate blow-up, and it takes a
+    fraction of a second instead of decoding and re-encoding every frame.
+    """
+    print(f"Merging {len(video_paths)} videos into {output_path}...")
+
+    remove_if_exists(output_path)
+
+    listing = Path(output_path).with_suffix('.concat.txt')
+    listing.write_text(
+        ''.join(f"file '{Path(p).resolve().as_posix()}'\n" for p in video_paths),
+        encoding='utf-8'
+    )
+
+    command = [
+        imageio_ffmpeg.get_ffmpeg_exe(),
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'concat', '-safe', '0', '-i', str(listing),
+        '-c', 'copy', str(output_path),
+    ]
+
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
         print(f"Full video saved to {output_path}")
-            
-    except Exception as e:
-        print(f"Failed to merge videos: {e}")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to merge videos: {e.stderr.strip()}")
+    finally:
+        listing.unlink(missing_ok=True)
 
 
 def render_combined(pipeline):
-    """Render combined SCA→NCA→Particles animation."""
+    """Render combined SCA->NCA->Particles animation."""
     # 1. Check prerequisites
     if not pipeline.sca_render_data_path.exists():
         raise FileNotFoundError(
@@ -261,19 +257,8 @@ def render_combined(pipeline):
     export_nca_frames(nca_frames_data, nca_npz_path)
 
     # 5. Render Combined SCA -> NCA Video
-    print("\n6. Rendering combined SCA→NCA animation...")
-    sca_render_config = SCARenderConfig(
-        output_width=pipeline.render_size,
-        output_height=pipeline.render_size
-    )
-    nca_render_config = NCARenderConfig(
-        output_width=pipeline.render_size,
-        output_height=pipeline.render_size,
-        cell_shape="square",
-        cell_scale=1.0
-    )
-    
-    combined_renderer = CombinedRenderer(sca_render_config, nca_render_config)
+    print("\n6. Rendering combined SCA->NCA animation...")
+    combined_renderer = CombinedRenderer(pipeline.sca_render, pipeline.nca_render)
     nca_data = load_nca_frames(nca_npz_path)
     
     combined_output = str(pipeline.render_combined_gif_path.with_suffix('.mp4'))
@@ -306,7 +291,7 @@ def render_combined(pipeline):
     # 8. Merge Videos
     print("\n9. Merging videos...")
     final_video_path = str(pipeline.render_output_dir / f'{pipeline.image_name}_full_pipeline.mp4')
-    merge_videos(pipeline, [combined_output, particle_output], final_video_path)
+    merge_videos([combined_output, particle_output], final_video_path)
 
 
 def main():

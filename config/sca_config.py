@@ -39,6 +39,12 @@ class SCAConfig:
     seed_mode: str = 'tips'  # 'tips' or 'all'
     max_seeds: int = 1000
 
+    # Render-data simplification, in source pixels. SCA emits one segment per
+    # growth step, which is far denser than any raster needs; anything below
+    # ~1.0 is sub-pixel in the output and invisible, while cutting render time
+    # and file size several-fold. Set to 0 to keep the raw geometry.
+    simplify_tolerance: float = 0.5
+
     animate: bool = False
     show_attractors: bool = True
 
@@ -48,21 +54,3 @@ class SCAConfig:
     def __post_init__(self):
         if self.random_seed is not None:
             np.random.seed(self.random_seed)
-
-    @classmethod
-    def from_pipeline(cls, pipeline_config) -> 'SCAConfig':
-        """Create SCA Config from PipelineConfig."""
-        return cls(
-            mask_image_path=pipeline_config.target_image,
-            num_attractors=pipeline_config.num_attractors,
-            attractor_placement=pipeline_config.attractor_placement,
-            influence_radius=pipeline_config.influence_radius,
-            kill_distance=pipeline_config.kill_distance,
-            growth_step=pipeline_config.growth_step,
-            branch_angle_threshold=pipeline_config.branch_angle_threshold,
-            min_attractors_per_branch=pipeline_config.min_attractors_per_branch,
-            max_iterations=pipeline_config.max_iterations,
-            stagnation_limit=pipeline_config.stagnation_limit,
-            output_dir=str(pipeline_config.sca_output_dir),
-            random_seed=pipeline_config.random_seed,
-        )

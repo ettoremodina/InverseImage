@@ -21,9 +21,10 @@ class Renderer(ABC):
         )
         ctx = cairo.Context(surface)
         
-        # Check if antialiasing is in config (both SCARenderConfig and NCARenderConfig have it now)
+        # ANTIALIAS_GOOD rather than BEST: on dense line work BEST costs
+        # noticeably more rasterisation time for no visible difference.
         if getattr(self.config, 'antialiasing', True):
-            ctx.set_antialias(cairo.ANTIALIAS_BEST)
+            ctx.set_antialias(cairo.ANTIALIAS_GOOD)
         
         r, g, b, a = self.config.background_color
         ctx.set_source_rgba(r, g, b, a)

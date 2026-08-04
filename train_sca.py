@@ -52,7 +52,8 @@ def main():
 
     # plot_growth_statistics(tree, save_path=str(pipeline.sca_output_dir / f'{pipeline.image_name}_stats.png'))
 
-    export_sca_data(tree, str(pipeline.sca_render_data_path))
+    export_sca_data(tree, str(pipeline.sca_render_data_path),
+                    tolerance=sca_config.simplify_tolerance)
     print(f"Exported render data to: {pipeline.sca_render_data_path}")
 
     seed_positions = extract_seed_positions(

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "projectId": "78e579b3-b346-455d-a948-57623715337a",
+  "projectName": "NCA-DifferentialGrowth",
+  "sourceRepository": "C:\\Users\\modin\\Desktop\\programming\\LIFE\\AgentWorkflow",
+  "connectedAtUtc": "2026-08-04T13:21:51.1992711Z",
+  "workflow": {
+    "version": "1.9.0",
+    "appliedAtUtc": "2026-08-04T13:21:51.1992766Z"
+  },
+  "providers": [
+    "codex",
+    "claude"
+  ],
+  "skills": [
+    {
+      "name": "agent-workflow-bootstrap",
+      "sourcePath": ".agents/skills/agent-workflow-bootstrap/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "memory-manager",
+      "sourcePath": ".agents/skills/memory-manager/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "code-flow-explorer",
+      "sourcePath": ".agents/skills/code-flow-explorer/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "frontend-design",
+      "sourcePath": ".agents/skills/frontend-design/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "html-output-viewer",
+      "sourcePath": ".agents/skills/html-output-viewer/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "paper-summarizer-visual",
+      "sourcePath": ".agents/skills/paper-summarizer-visual/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "parallel-worktree-tasks",
+      "sourcePath": ".agents/skills/parallel-worktree-tasks/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "pdf",
+      "sourcePath": ".agents/skills/pdf/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "teach",
+      "sourcePath": ".agents/skills/teach/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "webapp-testing",
+      "sourcePath": ".agents/skills/webapp-testing/SKILL.md",
+      "scope": "shared"
+    },
+    {
+      "name": "learn-by-building",
+      "sourcePath": ".agents/skills/learn-by-building/SKILL.md",
+      "scope": "shared"
+    }
+  ],
+  "memory": {
+    "global": true,
+    "local": true
+  }
+}

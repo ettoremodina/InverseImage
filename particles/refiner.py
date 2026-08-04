@@ -10,12 +10,24 @@ import cv2
 from tqdm import tqdm
 import torch
 
+from rendering.utils import open_video_writer
+
+
+def _resolve_device(device: str) -> str:
+    """Fall back to CPU when the requested accelerator is not available."""
+    if device == 'cuda' and not torch.cuda.is_available():
+        return 'cpu'
+    if device == 'mps' and not torch.backends.mps.is_available():
+        return 'cpu'
+    return device
+
+
 class ParticleRefiner:
     """
     Refines a low-res NCA image using particle advection.
     Flow is derived from NCA (structure), Color is derived from Target Image (detail).
     """
-    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, spawn_duration=0, device='cuda', background_image=None):
+    def __init__(self, nca_image, target_image, width, height, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, spawn_duration=0, device='cuda', background_image=None, outline_width=0, outline_color=(0.0, 0.0, 0.0, 1.0)):
         """
         Args:
             nca_image: Numpy array (H, W, C) float32 [0, 1]. Source of flow field.
@@ -29,6 +41,11 @@ class ParticleRefiner:
             radius: Radius of the particle head.
             spawn_duration: Number of frames over which to spawn particles. 0 = all at once.
             background_image: Optional numpy array (H, W, C) to use as initial canvas.
+            outline_width: Extra radius drawn behind each head in outline_color.
+                0 disables it. Note the outline area grows quadratically: with
+                radius=1 an outline of 1 already covers 4x more pixels than the
+                head itself and swamps the image.
+            outline_color: RGBA colour of that outline, components in [0, 1].
         """
         self.width = width
         self.height = height
@@ -38,7 +55,10 @@ class ParticleRefiner:
         self.stretch_factor = stretch_factor
         self.radius = radius
         self.spawn_duration = spawn_duration
-        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
+        self.outline_width = outline_width
+        self.outline_color = outline_color
+        self._disc_cache = {}
+        self.device = torch.device(_resolve_device(device))
         
         # 1. Prepare Flow Source (NCA)
         # Resize to target resolution for smooth gradients
@@ -307,10 +327,38 @@ class ParticleRefiner:
         
         # self.ages += 1.0 # Moved to top
 
+    def _disc_offsets(self, radius: int):
+        """Cached (dy, dx) offsets of a filled disc of the given radius."""
+        if radius not in self._disc_cache:
+            r = int(radius)
+            span = torch.arange(-r, r + 1, device=self.device)
+            dy, dx = torch.meshgrid(span, span, indexing='ij')
+            inside = (dy * dy + dx * dx) <= r * r
+            self._disc_cache[radius] = (dy[inside].reshape(-1), dx[inside].reshape(-1))
+        return self._disc_cache[radius]
+
+    def _splat(self, frame, x, y, colors, radius: int):
+        """
+        Draw filled discs at the given positions, fully on device.
+
+        Replaces a Python loop of cv2.circle calls (one per particle per frame).
+        """
+        if radius <= 0:
+            yi = torch.clamp(y.long(), 0, self.height - 1)
+            xi = torch.clamp(x.long(), 0, self.width - 1)
+            frame[yi, xi] = colors
+            return
+
+        dy, dx = self._disc_offsets(radius)
+        # (N, K) grid of every particle against every disc offset
+        yi = torch.clamp(y.long().unsqueeze(1) + dy.unsqueeze(0), 0, self.height - 1)
+        xi = torch.clamp(x.long().unsqueeze(1) + dx.unsqueeze(0), 0, self.width - 1)
+        frame[yi.reshape(-1), xi.reshape(-1)] = colors.repeat_interleave(dy.numel(), dim=0)
+
     def render_frame(self):
         """Render the current state of particles to an image."""
         # We draw onto the persistent canvas
-        
+
         # Apply trail fading
         self.canvas *= self.trail_fade
         
@@ -355,80 +403,58 @@ class ParticleRefiner:
             # Last one wins with this method.
             self.canvas[yi, xi] = colors
         
-        # Convert to numpy for output and overlay drawing
-        frame = (self.canvas * 255).byte().cpu().numpy()
-        
-        # Draw particle heads (circles) with outline
-        # We need px, py on CPU
-        # Only draw active heads
-        active_cpu = active.cpu().numpy()
-        px_cpu = self.px.cpu().numpy().astype(np.int32)[active_cpu]
-        py_cpu = self.py.cpu().numpy().astype(np.int32)[active_cpu]
-        
-        # Get colors for heads
-        # We need to filter px/py before calling get_colors to avoid sampling off-screen
-        # But get_colors clamps anyway.
-        # Let's just use the filtered cpu arrays to get colors
-        if len(px_cpu) > 0:
-            # We need to pass tensors to get_colors_at_positions
-            px_active = self.px[active]
-            py_active = self.py[active]
-            head_colors = self.get_colors_at_positions(px_active, py_active).cpu().numpy() * 255
-            
-            # Draw circles
-            # Note: This loop might be slow for very large particle counts.
-            # For 20k particles, it should be acceptable for offline rendering.
-            for i in range(len(px_cpu)):
-                x, y = px_cpu[i], py_cpu[i]
-                color = tuple(map(int, head_colors[i]))
-                
-                # Draw outline (black)
-                cv2.circle(frame, (x, y), self.radius + 1, (0, 0, 0), -1)
-                # Draw inner (color)
-                cv2.circle(frame, (x, y), self.radius, color, -1)
-            
-        return frame
+        # Draw the particle heads on top of the trails, on a copy so the heads
+        # do not become part of the persistent trail canvas.
+        px_active = self.px[active]
+        py_active = self.py[active]
 
-def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, device='cuda', background_image=None):
+        if len(px_active) > 0:
+            frame = self.canvas.clone()
+            head_colors = self.get_colors_at_positions(px_active, py_active)
+
+            if self.outline_width > 0:
+                outline = torch.tensor(
+                    self.outline_color[:self.channels], device=self.device, dtype=frame.dtype
+                ).expand(len(px_active), -1)
+                self._splat(frame, px_active, py_active, outline,
+                            self.radius + self.outline_width)
+
+            self._splat(frame, px_active, py_active, head_colors, self.radius)
+        else:
+            frame = self.canvas
+
+        return (frame.clamp(0, 1) * 255).byte().cpu().numpy()
+
+def generate_particle_animation(nca_final_frame, target_image, steps, width, height, output_path, fps=30, num_particles=20000, speed=1.0, trail_fade=0.92, stretch_factor=2.0, radius=2, device='cuda', background_image=None, outline_width=0, outline_color=(0.0, 0.0, 0.0, 1.0)):
     """Main driver to generate and save the particle animation."""
     print(f"Initializing Particle Refiner ({width}x{height}) on {device}...")
-    
+
     # Ensure nca_frame is numpy
     if isinstance(nca_final_frame, torch.Tensor):
         nca_final_frame = nca_final_frame.detach().cpu().numpy()
-    
+
     # If batch dim exists, take first
     if len(nca_final_frame.shape) == 4:
         nca_final_frame = nca_final_frame[0]
-        
+
     # Channels last
     if nca_final_frame.shape[0] in [3, 4]:
         nca_final_frame = np.transpose(nca_final_frame, (1, 2, 0))
-        
+
     # Spawn particles over the first 50% of the animation
     spawn_duration = int(steps * 0.5)
-    
-    refiner = ParticleRefiner(nca_final_frame, target_image, width, height, num_particles, speed, trail_fade, stretch_factor, radius=radius, spawn_duration=spawn_duration, device=device, background_image=background_image)
-    
-    # Setup video writer
-    # Use H.264 codec for better compatibility
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
+
+    refiner = ParticleRefiner(
+        nca_final_frame, target_image, width, height, num_particles, speed,
+        trail_fade, stretch_factor, radius=radius, spawn_duration=spawn_duration,
+        device=device, background_image=background_image,
+        outline_width=outline_width, outline_color=outline_color
+    )
+
     print(f"Rendering {steps} particle frames...")
-    for _ in tqdm(range(steps)):
-        refiner.step()
-        frame = refiner.render_frame()
-        
-        # Convert RGBA to BGR for OpenCV
-        if frame.shape[2] == 4:
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
-        elif frame.shape[2] == 3:
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        else:
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            
-        out.write(frame_bgr)
-        
-    out.release()
+    with open_video_writer(output_path, fps) as writer:
+        for _ in tqdm(range(steps)):
+            refiner.step()
+            writer.append_data(refiner.render_frame())
+
     print(f"Particle animation saved to {output_path}")

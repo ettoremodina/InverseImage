@@ -8,10 +8,11 @@ from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer
 from .combined_renderer import CombinedRenderer
 from .exporters import (
-    export_sca_data, 
+    export_sca_data,
     load_sca_data,
     export_nca_frames,
-    load_nca_frames
+    load_nca_frames,
+    build_polylines
 )
 from .animation import (
     frame_to_rgb,
@@ -20,4 +21,4 @@ from .animation import (
     save_frame_as_image,
     render_seeds_image
 )
-from .utils import draw_line
+from .utils import draw_line, load_rgb_image, max_polyline_depth, open_video_writer

@@ -49,37 +49,6 @@ class NCAConfig:
         if self.device is None:
             self.device = get_device()
 
-    @classmethod
-    def from_pipeline(cls, pipeline_config) -> 'NCAConfig':
-        """Create NCA Config from PipelineConfig."""
-        # We assume pipeline_config is of type PipelineConfig, but we don't import it to avoid circular deps
-        
-        stages = []
-        for s in pipeline_config.progressive_stages:
-            stages.append(ResolutionStage(
-                size=s.size, epochs=s.epochs,
-                batch_size=s.batch_size, accumulation_steps=s.accumulation_steps
-            ))
-        
-        return cls(
-            channel_n=pipeline_config.channel_n,
-            hidden_size=pipeline_config.hidden_size,
-            update_rate=pipeline_config.update_rate,
-            image_path=pipeline_config.target_image,
-            target_size=pipeline_config.target_size,
-            target_padding=pipeline_config.target_padding,
-            n_epochs=pipeline_config.n_epochs,
-            batch_size=pipeline_config.batch_size,
-            steps_per_epoch=pipeline_config.steps_per_epoch,
-            lr=pipeline_config.lr,
-            lr_gamma=pipeline_config.lr_gamma,
-            betas=pipeline_config.betas,
-            progressive_stages=stages,
-            use_mixed_precision=pipeline_config.use_mixed_precision,
-            seed_positions=None, # This is usually loaded separately or passed in
-            output_dir=str(pipeline_config.nca_output_dir),
-            animation_steps=pipeline_config.animation_steps
-        )
 
 # Alias for backward compatibility with pickled models
 Config = NCAConfig

@@ -11,7 +11,7 @@ from pathlib import Path
 import json
 import numpy as np
 
-from .common import ResolutionStage, get_device
+from .common import get_device
 from .nca_config import NCAConfig
 from .sca_config import SCAConfig
 from .render_config import SCARenderConfig, NCARenderConfig
@@ -25,7 +25,7 @@ class PipelineConfig:
     """
     
     # ==================== MAIN SETTING ====================
-    target_image: str = 'images/fedemor.jpeg'
+    target_image: str = 'images/jellyfish.png'
     output_base: str = 'outputs'
     
     # ==================== SUB-CONFIGS ====================
@@ -56,6 +56,12 @@ class PipelineConfig:
     random_seed: Optional[int] = None
     
     def __post_init__(self):
+        if not Path(self.target_image).exists():
+            raise FileNotFoundError(
+                f"target_image not found: {self.target_image}\n"
+                f"Set PipelineConfig.target_image in config/pipeline.py to an existing file."
+            )
+
         if self.device is None:
             self.device = get_device()
         if self.random_seed is not None:
@@ -185,16 +191,11 @@ class PipelineConfig:
         self.render_output_dir.mkdir(parents=True, exist_ok=True)
 
 
-def load_config(path: str = 'config/pipeline.json') -> PipelineConfig:
+def load_config() -> PipelineConfig:
     """
-    Load config. 
-    Returns the default configuration.
+    Return the pipeline configuration.
+
+    The config is code-based: edit the dataclass defaults in this file.
+    All scripts go through this function so they always agree on paths.
     """
     return PipelineConfig()
-
-
-def save_config(config: PipelineConfig, path: str = 'config/pipeline.json'):
-    """Save config to JSON file (Deprecated but kept for compatibility if needed)."""
-    # We don't really need to save the full config anymore since it's code-based,
-    # but we can save a summary.
-    pass

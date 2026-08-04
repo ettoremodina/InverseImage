@@ -15,10 +15,15 @@ class SCARenderConfig:
     branch_color_end: Tuple[float, float, float, float] = (0.10, 0.60, 0.30, 1.0)
     branch_base_width: float = 4.5
     branch_tip_width: float = 0.5
-    
+
+    # Number of depth bands the colour/width gradient is quantised into.
+    # Every band is drawn as one batched Cairo stroke, so this trades a little
+    # gradient smoothness for render speed. Above ~64 the banding is invisible.
+    color_steps: int = 64
+
     sway_magnitude: float = 3
     sway_frequency: float = 5.0
-    
+
     antialiasing: bool = True
 
 
@@ -28,8 +33,6 @@ class NCARenderConfig:
     output_height: int = 512
     background_color: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
     
-    cell_shape: str = "square"  # "circle", "square", "hexagon"
-    cell_scale: float = 1.0  # multiplier for cell size (1.0 = cells touch)
     alpha_threshold: float = 0.1  # cells below this alpha are not drawn
     
     temporal_smoothing: float = 0  # 0.0 = no smoothing, 0.9 = heavy smoothing

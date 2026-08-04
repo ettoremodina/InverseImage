@@ -60,6 +60,8 @@ We don't just display the pixels. We treat the NCA output as a **flow field**.
 
 ## 🛠️ Usage
 
+**👉 Full reference: [docs/USAGE.md](docs/USAGE.md)** — every command, output path, and tuning parameter.
+
 The pipeline is controlled by a single configuration file: `config/pipeline.py`.
 
 ### 1. Configure
@@ -71,6 +73,7 @@ class PipelineConfig:
     target_image: str = 'images/your_image.png'  # <--- Change this
     # ...
 ```
+All output paths are derived from this filename, so this is the only path you need to set.
 
 ### 2. Generate Skeleton (SCA)
 Run the Space Colonization Algorithm to create the tree and find seed points.
@@ -91,7 +94,21 @@ Generate the final high-quality video combining all steps.
 ```bash
 python render.py --mode combined
 ```
-*   *Output*: `outputs/rendering/` (Final MP4/GIF)
+*   *Output*: `outputs/rendering/<name>_full_pipeline.mp4` (plus the intermediate `_combined.mp4` and `_particles.mp4`)
+
+Other modes render a single stage in isolation:
+
+| Command | Renders | Output |
+| --- | --- | --- |
+| `python render.py --mode sca` | skeleton growth only | `<name>_sca.mp4` |
+| `python render.py --mode nca` | texture growth only (centre seed) | `<name>_nca.mp4` |
+| `python render.py --mode particles` | particle pass over existing NCA frames | `<name>_particles.mp4` |
+| `python render.py --mode combined` | the whole pipeline | `<name>_full_pipeline.mp4` |
+
+To tweak particle parameters without regenerating the NCA frames:
+```bash
+python run_particles.py
+```
 
 ---
 
@@ -102,7 +119,8 @@ python render.py --mode combined
 *   `nca/`: Neural Cellular Automata model and training loop (PyTorch).
 *   `particles/`: Particle advection and flow field rendering.
 *   `rendering/`: Animation engines and exporters.
-*   `docs/`: Detailed explanations of the math and biology behind the code.
+*   `tools/`: Helper scripts (RGBA image painter, video splitter for docs assets).
+*   `docs/`: [Usage guide](docs/USAGE.md) and detailed explanations of the math and biology behind the code.
 
 ---
 

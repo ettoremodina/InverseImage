@@ -2,7 +2,73 @@
 Rendering utility functions.
 """
 
+from pathlib import Path
+from typing import Dict, List
+
+import imageio
 import numpy as np
+
+# Every video in the pipeline goes through these settings, so clips can be
+# concatenated later with a stream copy instead of being re-encoded.
+VIDEO_CODEC = 'libx264'
+VIDEO_QUALITY = 8
+VIDEO_PIXELFORMAT = 'yuv420p'
+
+
+def open_video_writer(output_path: str, fps: int):
+    """
+    Open a streaming H.264 writer.
+
+    Streaming keeps memory flat: a 30 s 1024x1024 render is ~2.5 GB if the
+    frames are collected in a list first, and nothing at all this way.
+    """
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    return imageio.get_writer(
+        output_path,
+        fps=fps,
+        codec=VIDEO_CODEC,
+        quality=VIDEO_QUALITY,
+        pixelformat=VIDEO_PIXELFORMAT,
+        macro_block_size=1,
+    )
+
+
+def load_rgb_image(path: str, background=(1.0, 1.0, 1.0)) -> np.ndarray:
+    """
+    Load an image as float32 RGB in [0, 1], flattening alpha onto `background`.
+
+    Target images are usually RGBA cut-outs whose transparent pixels are stored
+    as pure black. Reading them without the alpha channel turns 80% of the
+    image into black, which the particle stage would then happily paint onto
+    the canvas. Compositing first keeps the transparent area the same colour as
+    the render background, so stray particles stay invisible.
+    """
+    import cv2  # local import: only the particle path needs OpenCV
+
+    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if image is None:
+        raise FileNotFoundError(f"Image not found: {path}")
+
+    if image.ndim == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    elif image.shape[2] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+    else:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    image = image.astype(np.float32) / 255.0
+
+    if image.shape[2] == 4:
+        alpha = image[..., 3:4]
+        canvas = np.asarray(background, dtype=np.float32).reshape(1, 1, 3)
+        image = image[..., :3] * alpha + canvas * (1.0 - alpha)
+
+    return np.ascontiguousarray(image)
+
+
+def max_polyline_depth(polylines: List[Dict]) -> int:
+    """Deepest point depth in an SCA polyline set (1 when the tree is empty)."""
+    return max((p['depths'][-1] for p in polylines), default=1)
 
 
 def draw_line(img: np.ndarray, x1: int, y1: int, x2: int, y2: int, color: list):

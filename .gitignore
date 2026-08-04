@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.pytest_cache/
+
+# Generated pipeline output
+outputs/
+
+# AgentWorkflow junctions are machine-local and recreated from
+# .agents/control-center.json. Add a targeted exception if a skill is localized.
+.agents/skills/
+.agents/memory/global/
+
+# AgentWorkflow junctions are machine-local and recreated from
+# .agents/control-center.json. Add a targeted exception if a skill is localized.
+.claude/skills/
