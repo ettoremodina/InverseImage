@@ -1,9 +1,10 @@
 """
 The single timeline (PLAN 3.1).
 
-Replaces `combined_renderer.py`. The old pipeline produced `combined.mp4` and
-`particles.mp4` separately and concatenated them with ffmpeg, freezing the
-background for the last stage -- at the cut the tree's sway stopped dead.
+This replaced the old sequential renderer, now deleted. That one produced
+`combined.mp4` and `particles.mp4` separately and concatenated them with
+ffmpeg, freezing the background for the last stage -- at the cut the tree's
+sway stopped dead.
 
 Here there is one loop over frames. Every stage has its own activity curve and
 is evaluated at every frame, so the stages overlap: the NCA enters while the
@@ -43,13 +44,19 @@ class StageLayer(Protocol):
     """
     What the timeline needs from a stage in order to draw it.
 
-    The swarm of stage 3 will implement exactly this: given how far along its
-    own window it is, and the frame underneath it, return an RGBA layer with
-    straight alpha at canvas resolution, or None when it has nothing to draw.
+    Given how far along its own window it is, the frame underneath it, and the
+    NCA tissue of this frame, return an RGBA layer with straight alpha at canvas
+    resolution, or None when it has nothing to draw.
+
+    `tissue` is the stage-2 layer *before* it was composited into `beneath`, and
+    it is passed separately because its alpha is the only record of where the
+    NCA has actually grown: `beneath` is opaque everywhere, background included.
+    The swarm needs that mask both to know where its agents may live and to know
+    where it is allowed to show (PLAN §3.3).
     """
 
-    def layer(self, progress: float, time: float,
-              beneath: np.ndarray) -> Optional[np.ndarray]:
+    def layer(self, progress: float, time: float, beneath: np.ndarray,
+              tissue: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
         ...
 
 
@@ -230,10 +237,13 @@ class TimelineRenderer:
                     canvas = composite(canvas, flesh)
 
                 # ----------------------------------------------------- swarm
+                # After the flesh, before the camera: the swarm repaints the
+                # tissue stage 2 grew, and the crop still happens once, at the
+                # end, on the finished canvas.
                 if swarm is not None:
                     swarm_progress = window_progress(timing.swarm, time)
                     if swarm_progress > 0.0:
-                        swarm_layer = swarm.layer(swarm_progress, time, canvas)
+                        swarm_layer = swarm.layer(swarm_progress, time, canvas, flesh)
                         if swarm_layer is not None:
                             canvas = composite(canvas, swarm_layer)
 

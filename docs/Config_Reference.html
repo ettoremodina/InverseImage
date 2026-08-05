@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Config Reference — NCA · SCA · Swarm Pipeline</title>
+<style>
+:root {
+  --bg: #f7f5f1;
+  --bg-alt: #ffffff;
+  --ink: #1c1a17;
+  --ink-dim: #55504a;
+  --ink-faint: #8a847c;
+  --accent: #7a4a2a;
+  --accent-2: #2f6b4f;
+  --accent-3: #3a5a8a;
+  --line: #e2ddd3;
+  --code-bg: #efe9df;
+  --code-ink: #4a3520;
+  --table-head: #ece5d8;
+  --table-stripe: #fbfaf7;
+  --warn-bg: #fbeee0;
+  --warn-line: #d9a668;
+  --shadow: 0 1px 3px rgba(30, 20, 10, 0.08);
+  --radius: 10px;
+  font-size: 16px;
+}
+
+:root[data-theme="dark"] {
+  --bg: #17140f;
+  --bg-alt: #1e1a14;
+  --ink: #ece6da;
+  --ink-dim: #b8afa0;
+  --ink-faint: #857c6e;
+  --accent: #e0a870;
+  --accent-2: #7fbf9c;
+  --accent-3: #8fb0e0;
+  --line: #353026;
+  --code-bg: #2a2419;
+  --code-ink: #e8c99a;
+  --table-head: #2a2419;
+  --table-stripe: #1c1811;
+  --warn-bg: #2e2311;
+  --warn-line: #9a6a2e;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17140f;
+    --bg-alt: #1e1a14;
+    --ink: #ece6da;
+    --ink-dim: #b8afa0;
+    --ink-faint: #857c6e;
+    --accent: #e0a870;
+    --accent-2: #7fbf9c;
+    --accent-3: #8fb0e0;
+    --line: #353026;
+    --code-bg: #2a2419;
+    --code-ink: #e8c99a;
+    --table-head: #2a2419;
+    --table-stripe: #1c1811;
+    --warn-bg: #2e2311;
+    --warn-line: #9a6a2e;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, "Source Serif Pro", serif;
+  line-height: 1.62;
+  font-size: 1rem;
+}
+
+code, pre, .mono, table.params td:first-child, .path {
+  font-family: "JetBrains Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+}
+
+a { color: var(--accent-3); text-decoration: none; border-bottom: 1px solid transparent; }
+a:hover { border-bottom-color: currentColor; }
+
+.layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 880px);
+  justify-content: center;
+  gap: 2.5rem;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 2.2rem 1.5rem 6rem;
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; max-height: none; }
+}
+
+nav.toc {
+  position: sticky;
+  top: 1.5rem;
+  align-self: start;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  font-size: 0.86rem;
+  padding-right: 0.5rem;
+}
+
+nav.toc .toc-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin: 0 0 0.6rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+nav.toc ul { list-style: none; margin: 0 0 1.1rem; padding: 0; }
+nav.toc li { margin: 0.15rem 0; }
+nav.toc a {
+  color: var(--ink-dim);
+  display: block;
+  padding: 0.15rem 0;
+  border-bottom: none;
+}
+nav.toc a:hover { color: var(--accent); }
+nav.toc .sub { padding-left: 0.9rem; font-size: 0.94em; }
+
+#theme-toggle {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  background: var(--bg-alt);
+  color: var(--ink-dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  margin-bottom: 1.2rem;
+}
+#theme-toggle:hover { color: var(--ink); border-color: var(--accent); }
+
+main { min-width: 0; }
+
+header.hero { margin-bottom: 2.6rem; }
+header.hero .kicker {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+h1 {
+  font-size: 2.1rem;
+  margin: 0 0 0.5rem;
+  line-height: 1.2;
+}
+header.hero p.lead {
+  color: var(--ink-dim);
+  font-size: 1.08rem;
+  max-width: 62ch;
+  margin: 0.6rem 0 0;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin: 3.2rem 0 0.4rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 1.5rem;
+}
+section:first-of-type h2 { border-top: none; padding-top: 0; }
+
+h3 {
+  font-size: 1.12rem;
+  margin: 2rem 0 0.6rem;
+  color: var(--ink);
+  scroll-margin-top: 1.5rem;
+}
+h3 .path { color: var(--ink-faint); font-size: 0.82em; font-weight: normal; }
+
+h4 {
+  font-size: 0.95rem;
+  margin: 1.4rem 0 0.4rem;
+  color: var(--ink-dim);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+p { margin: 0.7rem 0; }
+.dek { color: var(--ink-dim); font-size: 0.98rem; }
+
+.path {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+.card {
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.3rem 1.5rem;
+  margin: 1.1rem 0 1.6rem;
+  box-shadow: var(--shadow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.6rem;
+  font-size: 0.92rem;
+}
+table.params th, table.params td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.params th {
+  background: var(--table-head);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+table.params tbody tr:nth-child(even) { background: var(--table-stripe); }
+table.params td:first-child { color: var(--accent); white-space: nowrap; }
+table.params td:nth-child(2) { color: var(--ink-dim); white-space: nowrap; }
+table.params td:last-child { color: var(--ink); }
+
+.overflow { overflow-x: auto; }
+
+.note, .warn {
+  border-left: 3px solid var(--accent-2);
+  background: var(--bg-alt);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.93rem;
+  color: var(--ink-dim);
+}
+.warn {
+  border-left-color: var(--warn-line);
+  background: var(--warn-bg);
+}
+.note strong, .warn strong { color: var(--ink); }
+
+.pill {
+  display: inline-block;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-faint);
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.pill.wired { color: var(--accent-2); border-color: var(--accent-2); }
+.pill.standalone { color: var(--accent-3); border-color: var(--accent-3); }
+
+pre {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 0.9rem 1.1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin: 1rem 0;
+}
+code { background: var(--code-bg); color: var(--code-ink); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+pre code { background: none; padding: 0; }
+
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1rem 0 1.6rem;
+  font-size: 0.88rem;
+}
+.flow .step {
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.flow .arrow { color: var(--ink-faint); }
+
+footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.top-link { font-size: 0.8rem; }
+
+::selection { background: var(--accent); color: var(--bg); }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <button id="theme-toggle" type="button">tema: auto</button>
+  <div class="toc-title">In questa pagina</div>
+  <ul>
+    <li><a href="#come-funzionano">Come funzionano le config</a></li>
+    <li><a href="#pipeline">1 · pipeline.py</a></li>
+    <li><a href="#timing">2 · timing_config.py</a></li>
+    <li><a href="#sca">3 · sca_config.py</a></li>
+    <li><a href="#nca">4 · nca_config.py</a></li>
+    <li><a href="#seeding">5 · seeding_config.py</a></li>
+    <li><a href="#render">6 · render_config.py
+      <ul>
+        <li class="sub"><a href="#render-sca">SCARenderConfig</a></li>
+        <li class="sub"><a href="#render-nca">NCARenderConfig</a></li>
+        <li class="sub"><a href="#render-cells">CellRenderConfig</a></li>
+        <li class="sub"><a href="#render-lighting">LightingConfig</a></li>
+        <li class="sub"><a href="#render-scaffold">ScaffoldFadeConfig</a></li>
+      </ul>
+    </li>
+    <li><a href="#palette">7 · palette_config.py</a></li>
+    <li><a href="#grading">8 · grading_config.py</a></li>
+    <li><a href="#camera">9 · camera_config.py</a></li>
+    <li><a href="#particles">10 · particle_config.py</a></li>
+    <li><a href="#swarm">11 · swarm_config.py</a></li>
+    <li><a href="#cheatsheet">Cheatsheet: cosa tocco per...</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<header class="hero">
+  <div class="kicker">Documento di riferimento</div>
+  <h1>Guida alle config</h1>
+  <p class="lead">
+    Ogni parametro della pipeline vive in un dataclass Python dentro
+    <code>config/</code>. Non c'è CLI: si edita il default e si rilancia lo
+    stage giusto. Questa pagina elenca ogni file, ogni campo e l'effetto
+    concreto di alzarlo o abbassarlo — la stessa cosa che c'è in
+    <a href="USAGE.md#5-tuning-the-output">USAGE.md §5</a> ma più estesa, e con
+    <code>swarm_config.py</code> (stadio 3, non ancora agganciato alla
+    pipeline) documentato per la prima volta.
+  </p>
+</header>
+
+<section id="come-funzionano">
+<h2>Come funzionano le config</h2>
+
+<p>
+Tutti gli script chiamano <code>load_config()</code> in
+<a href="../config/pipeline.py"><code>config/pipeline.py</code></a>, che
+costruisce un <code>PipelineConfig</code> con i valori di default scritti nel
+dataclass. <strong>Non esiste nessun'altra via di ingresso</strong>: cambiare
+un comportamento significa editare quel file (o uno dei sotto-config che
+importa) e rilanciare.
+</p>
+
+<div class="flow">
+  <span class="step">edita il dataclass in <code>config/*.py</code></span>
+  <span class="arrow">→</span>
+  <span class="step"><code>python train_sca.py</code></span>
+  <span class="arrow">→</span>
+  <span class="step"><code>python train_nca.py</code></span>
+  <span class="arrow">→</span>
+  <span class="step"><code>python render.py --mode timeline</code></span>
+</div>
+
+<h4>Un solo punto di verità, propagato in automatico</h4>
+<p>
+<code>PipelineConfig.__post_init__</code> spinge i valori condivisi (
+<code>target_image</code>, <code>device</code>, <code>random_seed</code>,
+<code>render_size</code>...) dentro i sotto-config (<code>nca</code>,
+<code>sca</code>, <code>nca_render</code>, <code>sca_render</code>). Impostarli
+di nuovo lì viene <strong>sovrascritto</strong> — vanno toccati una volta sola,
+in cima a <code>PipelineConfig</code>.
+</p>
+
+<div class="warn">
+<strong>Non editare mai <code>sca_render.background_color</code> o
+<code>nca_render.background_color</code> a mano</strong> se <code>palette.enabled
+= True</code>: <code>apply_palette()</code> li riscrive a ogni costruzione
+della config, derivandoli dall'immagine target. Per un colore fisso, usa
+<code>palette.background_color</code> (override manuale, vince sempre) invece
+di toccare i render config direttamente.
+</div>
+
+<h4>Gerarchia degli override</h4>
+<p>
+Alcuni valori hanno tre livelli, dal più debole al più forte:
+</p>
+<ol>
+<li>valore derivato automaticamente (es. palette estratta dall'immagine con k-means);</li>
+<li>default scritto nel dataclass;</li>
+<li>override manuale nello stesso dataclass (es. <code>palette.background_color</code>, <code>palette.branch_color</code>) — <strong>vince sempre</strong>.</li>
+</ol>
+
+<h4>Percorsi derivati, non configurabili singolarmente</h4>
+<p>
+Ogni percorso di output (<code>nca_model_path</code>,
+<code>sca_render_data_path</code>, ...) è una <code>@property</code> calcolata
+da <code>target_image</code> e <code>output_base</code>. Non si spostano i
+singoli file: si cambia <code>output_base</code>, oppure si accetta la
+convenzione <code>outputs/&lt;stage&gt;/&lt;nome-immagine&gt;_*</code>.
+</p>
+
+<p class="note">
+Ogni sezione qui sotto segnala anche <strong>quale stage va rilanciato</strong>
+dopo la modifica. È l'informazione che costa di più dimenticare: cambiare
+<code>sca_config.py</code> sposta i seed points, quindi invalida l'NCA già
+addestrato.
+</p>
+</section>
+
+<section id="pipeline">
+<h2>1 · <span class="mono">pipeline.py</span> <span class="pill wired">radice di tutto</span></h2>
+<p class="path"><a href="../config/pipeline.py">config/pipeline.py</a> — <code>PipelineConfig</code></p>
+<p class="dek">L'unica cosa che serve toccare per una nuova immagine. Tutto il resto è derivato o propagato da qui.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>target_image</td><td>'images/jellyfish.png'</td><td>L'unico campo che si tocca sempre. Path validato a costruzione: un file inesistente fallisce subito con un messaggio chiaro invece che a metà SCA. Da questo stringa deriva ogni percorso di output.</td></tr>
+<tr><td>output_base</td><td>'outputs'</td><td>Radice di tutti gli output. Cambiarlo sposta l'intero albero <code>nca/</code>, <code>sca/</code>, <code>rendering/</code> altrove — utile per tenere run diversi separati.</td></tr>
+<tr><td>render_size</td><td>512</td><td>Risoluzione finale del video (quadrata). Non è il costo dominante: lo è <code>render_supersample</code>.</td></tr>
+<tr><td>render_supersample</td><td>2</td><td>Tutto viene disegnato su un canvas <code>render_size × render_supersample</code> e ridotto con media d'area: è l'antialiasing vero, quello che toglie lo shimmer ai rami SCA sottili. Il crop della camera vive sullo stesso canvas, quindi non c'è un secondo ingrandimento. <code>1</code> = disabilitato. Costo: ~3-4× il tempo di rasterizzazione per ogni incremento.</td></tr>
+<tr><td>render_fps</td><td>20</td><td>Framerate delle modalità legacy (<code>combined</code>/<code>sca</code>/<code>nca</code>). La modalità <code>timeline</code> usa lo stesso valore ma lo governa <code>timing_config.py</code>.</td></tr>
+<tr><td>animation_steps</td><td>100</td><td>Step NCA per l'anteprima e per <code>--mode nca</code>. In modalità <code>timeline</code> viene sovrascritto: il numero reale segue la finestra NCA (<code>max(animation_steps, nca_duration × render_fps)</code>).</td></tr>
+<tr><td>total_video_duration_seconds<br>sca_percentage / nca_percentage</td><td>20.0<br>0.4 / 0.6</td><td><strong>Legacy</strong>: guidano solo <code>--mode combined</code> (le fasi concatenate, non sovrapposte). La modalità <code>timeline</code> le ignora del tutto e usa <code>timing</code> — vedi §2.</td></tr>
+<tr><td>seed_positions_path</td><td>None → auto</td><td>Se <code>None</code>, punta automaticamente a <code>sca_seeds_path</code> (i tip dell'albero SCA). Impostalo a mano solo per riusare i seed di un'altra run.</td></tr>
+<tr><td>device</td><td>None → auto</td><td><code>get_device()</code> sceglie MPS → CUDA → CPU. Forzare <code>'cpu'</code> è utile solo per debug deterministico.</td></tr>
+<tr><td>random_seed</td><td>None</td><td>Se impostato, fissa <code>np.random.seed</code> e viene propagato a <code>sca.random_seed</code>. Utile per confrontare due config a parità di rumore.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> dipende dal campo. <code>target_image</code>, <code>random_seed</code> → tutta la pipeline da capo. <code>render_size</code>, <code>render_supersample</code>, <code>render_fps</code> → solo <code>render.py</code> (con <code>--reuse-frames</code> se i frame NCA sono già buoni).</p>
+</section>
+
+<section id="timing">
+<h2>2 · <span class="mono">timing_config.py</span> <span class="pill wired">solo modalità timeline</span></h2>
+<p class="path"><a href="../config/timing_config.py">config/timing_config.py</a> — <code>TimingConfig</code>, <code>StageWindow</code></p>
+<p class="dek">Quando ogni stadio è attivo, in secondi, e con quale curva di easing. Gli intervalli sono pensati per <strong>sovrapporsi</strong>: l'NCA entra mentre l'albero cresce ancora, lo sciame entra su tessuto già maturo.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>total_duration</td><td>25.0 s</td><td>Lunghezza del video finito, hold incluso.</td></tr>
+<tr><td>hold</td><td>3.0 s</td><td>Fermo immagine finale — resta solo il respiro del sway.</td></tr>
+<tr><td>sca</td><td>0.0 → 7.0, ease_out</td><td>Finestra di crescita dello scheletro: parte rapida, rallenta.</td></tr>
+<tr><td>nca</td><td>2.0 → 16.0, ease_in_out</td><td>Finestra della texture: entra mentre l'albero cresce ancora.</td></tr>
+<tr><td>swarm</td><td>12.0 → 22.0, linear</td><td>Finestra dello sciame (stadio 3, non ancora implementato — renderizza come hold). Entra su tessuto maturo.</td></tr>
+<tr><td>scaffold_fade</td><td>10.0 → 18.0, ease_in_out</td><td>Non è uno stadio, è una conseguenza: quando l'albero sparisce sotto la carne. Vedi <code>ScaffoldFadeConfig</code> in §6.</td></tr>
+</tbody>
+</table></div>
+
+<div class="warn">
+<strong>Il vincolo di sovrapposizione è validato.</strong>
+<code>TimingConfig.validate()</code> avvisa (o solleva, con <code>strict=True</code>)
+se uno stadio inizia dopo che il precedente è finito: le fasi tornano
+sequenziali in silenzio, ed è esattamente il difetto che questo design
+doveva risolvere. Errore tipico in log:
+<code>TimingConfig: stage 'x' starts after the previous stage ends</code>.
+</div>
+
+<p>Easing disponibili in <a href="../rendering/easing.py"><code>rendering/easing.py</code></a>: <code>linear</code>, <code>ease_in</code>, <code>ease_out</code>, <code>ease_in_out</code>, <code>ease_out_cubic</code>.</p>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py --mode timeline</code>. Nessun retraining necessario — è puro tempismo di rendering.</p>
+</section>
+
+<section id="sca">
+<h2>3 · <span class="mono">sca_config.py</span> <span class="pill wired">stage 1 — scheletro</span></h2>
+<p class="path"><a href="../config/sca_config.py">config/sca_config.py</a> — <code>SCAConfig</code></p>
+<p class="dek">Space Colonization Algorithm: fa crescere i rami dentro la sagoma dell'immagine e ne estrae i seed per l'NCA. Teoria completa in <a href="Space_Colonization_Algorithm.md">Space_Colonization_Algorithm.md</a>.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>num_attractors</td><td>10000</td><td>Più attrattori → ramificazione più densa e fine. Il costo cresce con questo numero.</td></tr>
+<tr><td>attractor_placement</td><td>'edge'</td><td><code>'edge'</code> aderisce ai contorni dell'immagine (crescita che segue la sagoma); <code>'random'</code> riempie la maschera uniformemente (crescita più a cespuglio).</td></tr>
+<tr><td>edge_threshold</td><td>0.1</td><td>Solo con <code>'edge'</code>. Più basso → più bordi rilevati → più punti d'attrazione lungo il contorno.</td></tr>
+<tr><td>influence_radius</td><td>50.0</td><td>Raggio entro cui un attrattore influenza un nodo del ramo. Più alto → crescita più rapida ma meno dettagliata.</td></tr>
+<tr><td>kill_distance</td><td>1.0</td><td>Distanza a cui un ramo "consuma" un attrattore. Più basso → rami devono avvicinarsi di più prima che l'attrattore sparisca.</td></tr>
+<tr><td>growth_step</td><td>1.0</td><td>Lunghezza del segmento per passo di crescita. Più piccolo → curve più morbide, crescita più lenta (più iterazioni).</td></tr>
+<tr><td>branch_angle_threshold</td><td>0.1</td><td>Soglia angolare oltre la quale un nuovo nodo è considerato l'inizio di un ramo separato.</td></tr>
+<tr><td>min_attractors_per_branch</td><td>2</td><td>Minimo di attrattori che un ramo deve servire per essere mantenuto.</td></tr>
+<tr><td>max_iterations</td><td>2000</td><td>Tetto massimo di passi di crescita — alzalo se lo scheletro si ferma troppo presto su casi con pochi attrattori sparsi.</td></tr>
+<tr><td>stagnation_limit</td><td>100</td><td>Iterazioni senza progresso prima di considerare la crescita stagnante (attiva <code>adaptive_influence</code> se on).</td></tr>
+<tr><td>adaptive_influence</td><td>True</td><td>Quando la crescita si ferma, allarga <code>influence_radius</code> (moltiplicato per <code>influence_growth_rate</code>, fino a <code>max_influence_radius</code>) invece di arrendersi.</td></tr>
+<tr><td>influence_growth_rate</td><td>1.1</td><td>Fattore moltiplicativo per l'allargamento adattivo del raggio.</td></tr>
+<tr><td>max_influence_radius</td><td>200.0</td><td>Tetto per l'allargamento adattivo.</td></tr>
+<tr><td>min_attractor_kill_ratio</td><td>0.95</td><td>La crescita si ferma quando questa frazione di attrattori è stata "uccisa" (consumata).</td></tr>
+<tr><td>enable_attractor_stopping</td><td>True</td><td>Usa il rapporto di attrattori consumati come criterio di stop, oltre a <code>max_iterations</code> e <code>stagnation_limit</code>.</td></tr>
+<tr><td>seed_mode</td><td>'tips'</td><td>Quali nodi dell'albero diventano seed NCA. <code>'tips'</code> usa solo le punte dei rami; <code>'all'</code> usa ogni nodo (molti più seed).</td></tr>
+<tr><td>max_seeds</td><td>1000</td><td>Tetto al numero di seed estratti.</td></tr>
+<tr><td>simplify_tolerance</td><td>0.5</td><td>Decimazione della geometria esportata, in pixel sorgente. SCA emette un segmento per ogni passo di crescita — molto più denso di quanto serva a un raster. Valori sotto ~1.0 sono invisibili nell'output ma tagliano tempo di render e dimensione file di parecchie volte. <code>0</code> = tiene la geometria grezza, un segmento per passo.</td></tr>
+<tr><td>animate</td><td>False</td><td>Salva un'animazione GIF della crescita SCA stessa (separata dal video finale).</td></tr>
+<tr><td>show_attractors</td><td>True</td><td>Disegna gli attrattori residui nelle preview statiche.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> <code>train_sca.py</code>, poi <code>train_nca.py</code> (i seed sono cambiati, quindi il modello va riaddestrato), poi <code>render.py</code>.</p>
+</section>
+
+<section id="nca">
+<h2>4 · <span class="mono">nca_config.py</span> <span class="pill wired">stage 2 — texture</span></h2>
+<p class="path"><a href="../config/nca_config.py">config/nca_config.py</a> — <code>NCAConfig</code></p>
+<p class="dek">Addestra l'automa cellulare a far crescere l'immagine target. Teoria in <a href="Growing_Neural_Cellular_Automata.md">Growing_Neural_Cellular_Automata.md</a>.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>target_size</td><td>128</td><td>Griglia di simulazione. Il principale driver di costo del training.</td></tr>
+<tr><td>target_padding</td><td>16</td><td>Margine attorno all'immagine dentro la griglia — spazio per crescere oltre i bordi originali.</td></tr>
+<tr><td>channel_n</td><td>16</td><td>Canali per cella (RGBA + canali nascosti). Più canali = più capacità di codificare stato, più costo.</td></tr>
+<tr><td>hidden_size</td><td>128</td><td>Larghezza della rete di update per cella. Capacità del modello.</td></tr>
+<tr><td>update_rate</td><td>0.5</td><td>Probabilità di stocastic cell update per passo — mima l'asincronia biologica reale.</td></tr>
+<tr><td>nca_steps</td><td>64</td><td>Passi di simulazione per inferenza/demo (non training).</td></tr>
+<tr><td>n_epochs</td><td>2000</td><td>Budget di training. Insieme a <code>batch_size</code> e <code>steps_per_epoch</code> determina il tempo totale.</td></tr>
+<tr><td>batch_size</td><td>8</td><td>Dimensione batch di training.</td></tr>
+<tr><td>steps_per_epoch</td><td>50</td><td>Passi di simulazione per esempio, per epoca.</td></tr>
+<tr><td>steps_variance</td><td>0.0</td><td>Deviazione standard gaussiana sul numero di passi — <code>0</code> = sempre lo stesso numero di step.</td></tr>
+<tr><td>use_pattern_pool</td><td>True</td><td>Sample-pool persistence training (Mordvintsev et al.): tiene vivo lo stato fra epoche invece di ripartire sempre dal seed. Tienilo acceso per una crescita stabile e a lungo termine.</td></tr>
+<tr><td>pool_size</td><td>1024</td><td>Numero di stati mantenuti nel pool.</td></tr>
+<tr><td>lr / lr_gamma</td><td>2e-3 / 0.9999</td><td>Learning rate e decadimento esponenziale per step.</td></tr>
+<tr><td>betas</td><td>(0.5, 0.5)</td><td>Momenti Adam.</td></tr>
+<tr><td>progressive_stages</td><td>[]</td><td>Lista di <code>ResolutionStage(size, epochs, batch_size, accumulation_steps)</code>. Più di una voce attiva il training multi-risoluzione progressivo (parte piccolo, sale di risoluzione).</td></tr>
+<tr><td>use_mixed_precision</td><td>True</td><td>Training più veloce su CUDA (fp16). Nessun effetto pratico su CPU.</td></tr>
+<tr><td>checkpoint_interval</td><td>0</td><td>Ogni quante epoche salvare un checkpoint intermedio. <code>0</code> = solo alla fine.</td></tr>
+</tbody>
+</table></div>
+
+<div class="note">
+<strong>Il modello si porta dietro la sua config.</strong> Il file <code>.pt</code>
+salva anche il dataclass usato per addestrarlo — <code>render.py</code> lo
+rilegge per sapere come interpretare i pesi. Cambiare
+<code>channel_n</code> o <code>hidden_size</code> dopo aver addestrato non ha
+effetto retroattivo su un modello già salvato; serve un nuovo training.
+</div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> <code>train_nca.py</code>, poi <code>render.py</code>. Cambiare solo <code>nca_steps</code>/<code>animation_steps</code> per il preview non richiede retraining.</p>
+</section>
+
+<section id="seeding">
+<h2>5 · <span class="mono">seeding_config.py</span> <span class="pill wired">inference-time</span></h2>
+<p class="path"><a href="../config/seeding_config.py">config/seeding_config.py</a> — <code>ProgressiveSeedingConfig</code></p>
+<p class="dek">Quando ogni seed viene iniettato nello stato NCA. Tenuto fuori da <code>NCAConfig</code> apposta: quel dataclass viene pickled dentro ogni checkpoint, quindi aggiungerci campi romperebbe i modelli vecchi. È una decisione a tempo di inferenza, non di training.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td><code>False</code> ripristina il vecchio comportamento: ogni seed acceso al passo 0.</td></tr>
+<tr><td>order</td><td>'depth'</td><td><code>'depth'</code>: il tempo di nascita segue la profondità del ramo su cui siede il seed (nasce quando quel ramo è già disegnato). <code>'random'</code>: tempo casuale, utile come controllo. <code>'none'</code>: tutti a t=0.</td></tr>
+<tr><td>spread</td><td>0.55</td><td>Frazione del rollout su cui è distribuita la semina. <code>0.55</code> = l'ultimo seed si accende al 55% degli step NCA, lasciando il resto per chiudere il tessuto.</td></tr>
+<tr><td>jitter</td><td>0.02</td><td>Piccolo offset casuale sui tempi di nascita, come frazione del rollout — seed alla stessa profondità non scattano tutti nello stesso istante.</td></tr>
+<tr><td>seed</td><td>3</td><td>Seed RNG per il jitter e per <code>order='random'</code>.</td></tr>
+</tbody>
+</table></div>
+
+<div class="warn">
+<strong>Fuori distribuzione per il modello attuale.</strong> Il modello di
+default è addestrato con tutti i seed accesi dal passo 0, quindi una semina
+scaglionata è un esperimento (PLAN 3.2): può rompersi in due modi — regioni
+già cresciute perturbate da un vicino che si accende, o seed tardivi che non
+attecchiscono. <code>enabled=False</code> torna al comportamento sicuro.
+</div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py</code> — è puro tempismo di rendering, nessun retraining.</p>
+</section>
+
+<section id="render">
+<h2>6 · <span class="mono">render_config.py</span> <span class="pill wired">stage 3 — look</span></h2>
+<p class="path"><a href="../config/render_config.py">config/render_config.py</a></p>
+<p class="dek">Il "look" della pipeline: geometria dei rami, cellularità della carne, luce, dissolvenza dello scaffold. Dettagli d'implementazione in <a href="Render_Pipeline.md">Render_Pipeline.md</a>.</p>
+
+<h3 id="render-sca"><span class="mono">SCARenderConfig</span> <span class="path">— lo scheletro disegnato</span></h3>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>background_color</td><td>derivato dalla palette</td><td>Non editare a mano se <code>palette.enabled=True</code> — vedi §7. È identico a <code>nca_render.background_color</code> per costruzione, non per coincidenza.</td></tr>
+<tr><td>branch_color → branch_color_end</td><td>marrone → verde (override da palette)</td><td>Gradiente base-tronco → punta del ramo. Normalmente sovrascritto dalla palette (§7); un override manuale in <code>palette</code> vince sempre.</td></tr>
+<tr><td>branch_base_width / branch_tip_width</td><td>4.5 / 0.5</td><td>Rastremazione del ramo dalla base alla punta (in modalità <code>'depth'</code>; in <code>'subtree'</code> è la larghezza di riferimento).</td></tr>
+<tr><td>color_steps</td><td>64</td><td>Bande in cui è quantizzato il gradiente colore/larghezza. Ogni banda è uno stroke Cairo unico — abbassarlo velocizza il render, alzarlo ammorbidisce il gradiente. Sotto ~32 la banding si vede.</td></tr>
+<tr><td>branch_width_mode</td><td>'subtree'</td><td><code>'subtree'</code>: la larghezza segue quanto albero porta il ramo (legge di Murray, <code>w_parent² = Σ w_child²</code>) — due rami alla stessa profondità non sono più identici se uno porta metà della chioma. <code>'depth'</code>: la vecchia regola, larghezza per distanza dalla radice.</td></tr>
+<tr><td>branch_width_gamma</td><td>0.45</td><td>Ridistribuzione visiva dei pesi subtree (non cambia la legge di Murray). Un albero con migliaia di foglie ha un peso di tronco ~<code>sqrt(foglie)</code>, quindi i pesi grezzi si accumulano vicino a zero; il gamma li riespande. <code>1.0</code> = Murray grezzo.</td></tr>
+<tr><td>branch_smoothing</td><td>True</td><td>Smoothing Catmull-Rom delle polilinee — SCA emette un segmento per passo di crescita, quindi le curve sono poligonali senza questo.</td></tr>
+<tr><td>smoothing_subdivisions</td><td>3</td><td>Sotto-suddivisioni per lo smoothing. Più alto = curve più morbide, più costo.</td></tr>
+<tr><td>prune_tips / prune_depth_start / prune_max_points</td><td>0.5 / 0.5 / 8</td><td>Diradamento dei rametti terminali che oggi sono uno scarabocchio: una polilinea è candidata se è una punta, finisce oltre <code>prune_depth_start</code> della profondità massima, ed è più corta di <code>prune_max_points</code>. <code>prune_tips</code> è la frazione di candidati scartati. I rami lunghi e profondi (tentacoli) sono sempre tenuti.</td></tr>
+<tr><td>sway_magnitude / sway_frequency</td><td>3 / 5.0</td><td>Ampiezza/frequenza dell'oscillazione idle — il "respiro" del ramo quando nient'altro si muove.</td></tr>
+<tr><td>antialiasing</td><td>True</td><td>Antialiasing di Cairo sul tratto (indipendente dal supersampling globale).</td></tr>
+</tbody>
+</table></div>
+<p class="note">I pesi subtree sono calcolati all'export e salvati nei render data. File scritti prima che esistessero funzionano comunque: la gerarchia viene ricostruita dalla geometria al caricamento (un log <code>Legacy SCA data</code> lo segnala). Riesegui <code>train_sca.py</code> per salvarli correttamente.</p>
+
+<h3 id="render-nca"><span class="mono">NCARenderConfig</span> <span class="path">— la carne</span></h3>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>alpha_threshold</td><td>0.1</td><td>Celle sotto questa alpha non vengono disegnate.</td></tr>
+<tr><td>temporal_smoothing</td><td>0.25</td><td><code>0.0</code> = nessuno smoothing, <code>0.9</code> = pesante. Un po' di smoothing toglie lo sfarfallio della fase rumorosa senza sfocare la crescita.</td></tr>
+<tr><td>initial_repeats / decay_rate</td><td>5 / 0.99</td><td>Persistenza/dilatazione temporale dei primi frame: <code>decay_rate &lt; 1.0</code> fa durare di più i frame iniziali (partenza lenta, poi accelera).</td></tr>
+<tr><td>antialiasing</td><td>True</td><td>Antialiasing indipendente dal supersampling globale.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="render-cells"><span class="mono">CellRenderConfig</span> <span class="path">— render_config.cells</span></h3>
+<p>Le celle NCA sono disegnate come dischi, non come blocchi quadrati di pixel. La cellularità è funzione del tempo: una cella giovane è un piccolo disco con un vuoto visibile attorno, una cella matura eccede il passo della griglia e si fonde con le vicine in una superficie continua.</p>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td><code>False</code> torna ai vecchi blocchi nearest-neighbour.</td></tr>
+<tr><td>shape</td><td>'circle'</td><td><code>'circle'</code> o <code>'square'</code>.</td></tr>
+<tr><td>cellularity</td><td>1.0</td><td>Quanto è marcato l'aspetto "colonia" all'inizio della crescita. Decade verso <code>cellularity_floor</code>.</td></tr>
+<tr><td>cellularity_floor</td><td>0.1</td><td>Residuo che sopravvive alla fine. <strong>Non mettere a 0</strong>: una superficie perfettamente liscia legge come plastica morta.</td></tr>
+<tr><td>cellularity_curve</td><td>1.6</td><td>Esponente del decadimento: <code>&gt;1</code> mantiene l'aspetto cellulare più a lungo.</td></tr>
+<tr><td>radius_mature / radius_young</td><td>0.78 / 0.34</td><td>Raggio della cella come frazione del passo griglia. Sopra <code>0.5</code> le vicine si sovrappongono — è ciò che chiude i vuoti in una superficie.</td></tr>
+<tr><td>maturity_alpha</td><td>0.85</td><td>Alpha oltre la quale una cella conta come matura.</td></tr>
+<tr><td>alpha_threshold</td><td>0.1</td><td>Celle sotto questa alpha non disegnate (anche soglia di maturità minima).</td></tr>
+<tr><td>alpha_gain</td><td>1.0</td><td>Moltiplicatore di opacità del colore depositato.</td></tr>
+<tr><td>radius_jitter / position_jitter</td><td>0.18 / 0.10</td><td>Irregolarità deterministica per-cella, scalata dalla cellularità corrente.</td></tr>
+<tr><td>jitter_seed</td><td>7</td><td>Seed per l'irregolarità deterministica.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="render-lighting"><span class="mono">LightingConfig</span> <span class="path">— render_config.lighting</span></h3>
+<p>Una normal map è costruita dal gradiente dell'alpha smussata, poi si applicano un termine lambertiano, un rim light e un bloom morbido. Tutto lavoro numpy 2D sul layer delle celle già renderizzato — il modello NCA non vede mai niente di questo.</p>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td>Disattiva tutto il passo di lighting.</td></tr>
+<tr><td>height_blur</td><td>1.6</td><td>Sigma, in pixel output, dello smoothing dell'alpha usato per la normal map.</td></tr>
+<tr><td>relief</td><td>3.0</td><td>Quanto il gradiente dell'alpha inclina le normali — rilievo più o meno marcato.</td></tr>
+<tr><td>light_direction</td><td>(-0.5, -0.7, 0.6)</td><td>Direzione della luce lambertiana.</td></tr>
+<tr><td>ambient / diffuse</td><td>0.62 / 0.55</td><td>Bilancio fra luce ambiente e diffusa.</td></tr>
+<tr><td>rim_enabled / rim_intensity / rim_power / rim_color</td><td>True / 0.45 / 2.2 / (0.75, 0.85, 1.0)</td><td>Luce di bordo sulla silhouette — separa la forma dallo sfondo.</td></tr>
+<tr><td>bloom_enabled / bloom_threshold / bloom_intensity / bloom_blur</td><td>True / 0.72 / 0.35 / 9.0</td><td>Bloom sulle celle più luminose sopra la soglia.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="render-scaffold"><span class="mono">ScaffoldFadeConfig</span></h3>
+<p>Come sparisce l'albero quando la carne lo copre.</p>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td>Disattiva la dissolvenza — lo scaffold resta visibile sempre.</td></tr>
+<tr><td>mode</td><td>'alpha'</td><td><code>'alpha'</code> (default, resa migliore): l'opacità del ramo segue l'alpha NCA campionata dove passa il ramo — sparisce solo dove è davvero coperto. <code>'time'</code>: l'intero albero sfuma a orario fisso, indipendentemente da cosa è cresciuto sopra. Utile come confronto.</td></tr>
+<tr><td>strength</td><td>0.95</td><td>Quanto va lontano la dissolvenza: <code>1</code> = il ramo sparisce del tutto.</td></tr>
+<tr><td>blur</td><td>6.0</td><td>Blur della maschera di copertura, in pixel output (solo modalità <code>'alpha'</code>).</td></tr>
+<tr><td>coverage_gain</td><td>1.6</td><td>Moltiplicatore applicato alla copertura prima dell'uso — rende la dissolvenza più rapida a coprire completamente.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py</code> (usa <code>--reuse-frames</code> per non ripetere il rollout NCA). Nessun retraining — è tutto post-processing sul rendering.</p>
+</section>
+
+<section id="palette">
+<h2>7 · <span class="mono">palette_config.py</span> <span class="pill wired">colore</span></h2>
+<p class="path"><a href="../config/palette_config.py">config/palette_config.py</a> — <code>PaletteConfig</code></p>
+<p class="dek">Sfondo e gradiente SCA derivati dall'immagine target via k-means, così i tre stadi vivono nello stesso mondo cromatico invece di avere colori hardcoded in due punti che divergono nel tempo.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td><code>False</code> mantiene i colori letterali scritti in <code>render_config.py</code> — nessuna estrazione.</td></tr>
+<tr><td>num_colors</td><td>5</td><td>Cluster k-means sui pixel non trasparenti dell'immagine target.</td></tr>
+<tr><td>sample_pixels</td><td>20000</td><td>Sottocampionamento casuale prima del k-means — farlo sull'immagine intera è inutile.</td></tr>
+<tr><td>kmeans_iterations</td><td>25</td><td>Iterazioni dell'algoritmo k-means.</td></tr>
+<tr><td>alpha_threshold</td><td>0.1</td><td>Pixel sotto questa alpha non contano come "soggetto".</td></tr>
+<tr><td>background_rule</td><td>'dark_desaturated'</td><td><code>'dark_desaturated'</code>: l'ombra del soggetto stesso. <code>'complementary'</code>: separazione più grafica/di contrasto. È una scelta di gusto, decisa guardando immagini reali.</td></tr>
+<tr><td>background_value / background_saturation</td><td>0.12 / 0.35</td><td>Luminanza target e quanta saturazione originale sopravvive nello sfondo.</td></tr>
+<tr><td>tree_from_palette</td><td>True</td><td>Il gradiente SCA usa la tinta dominante dell'immagine (desaturata/scurita) invece del marrone → verde hardcoded.</td></tr>
+<tr><td>tree_base_value / tree_tip_value</td><td>0.30 / 0.62</td><td>Valore (luminosità) agli estremi tronco/punta del gradiente.</td></tr>
+<tr><td>tree_saturation</td><td>0.30</td><td>Saturazione del gradiente dell'albero.</td></tr>
+<tr><td>background_color / branch_color / branch_color_end</td><td>None</td><td><strong>Override manuali</strong> — <code>None</code> = deriva dall'immagine; qualsiasi altro valore vince sempre, anche su <code>enabled=True</code>.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py</code>. Il colore è puro rendering, non tocca né SCA né NCA addestrato.</p>
+</section>
+
+<section id="grading">
+<h2>8 · <span class="mono">grading_config.py</span> <span class="pill wired">color grading</span></h2>
+<p class="path"><a href="../config/grading_config.py">config/grading_config.py</a> — <code>GradingConfig</code></p>
+<p class="dek">Un unico passo applicato a <strong>ogni</strong> frame di <strong>ogni</strong> stadio, appena prima di scriverlo. Ogni effetto si disattiva da solo; <code>enabled=False</code> spegne l'intero passo.</p>
+
+<h4>Curva tonale</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>tone_enabled</td><td>True</td><td>Disattiva solo la curva tonale, lascia il resto.</td></tr>
+<tr><td>lift</td><td>0.02</td><td>Alza i neri — il nero puro legge come "morto" in video.</td></tr>
+<tr><td>gain</td><td>1.02</td><td>Moltiplicatore delle luci alte.</td></tr>
+<tr><td>gamma</td><td>0.98</td><td>&lt;1 schiarisce i mezzitoni.</td></tr>
+<tr><td>contrast / contrast_pivot</td><td>1.06 / 0.45</td><td>Forza della curva a S e punto di perno attorno a cui ruota.</td></tr>
+<tr><td>saturation</td><td>1.04</td><td>Moltiplicatore di saturazione globale.</td></tr>
+<tr><td>shadow_tint</td><td>None → da palette</td><td>Le ombre vengono tinte verso il colore di sfondo, così i tre stadi condividono lo stesso mondo cromatico. <code>None</code> = riempito a runtime dalla palette.</td></tr>
+<tr><td>shadow_tint_strength</td><td>0.12</td><td>Intensità della tinta nelle ombre.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Vignetta</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>vignette_enabled</td><td>True</td><td>On/off.</td></tr>
+<tr><td>vignette_strength</td><td>0.28</td><td><code>0</code> = nessuna, <code>1</code> = pesante.</td></tr>
+<tr><td>vignette_radius</td><td>0.75</td><td>Dove inizia il falloff, in mezze-diagonali.</td></tr>
+<tr><td>vignette_softness</td><td>1.6</td><td>Esponente del falloff — più alto, transizione più dura.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Grana</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>grain_enabled</td><td>True</td><td>Rompe la griglia di pixel: la bassa risoluzione di simulazione legge come grana di pellicola invece che come immagine povera.</td></tr>
+<tr><td>grain_strength</td><td>0.030</td><td>Deviazione standard del rumore, in unità [0,1].</td></tr>
+<tr><td>grain_size</td><td>1.4</td><td>&gt;1 renderizza il rumore più piccolo e lo ingrandisce — grana più grossa e organica.</td></tr>
+<tr><td>grain_animated</td><td>True</td><td>Nuovo rumore ogni frame. Vedi l'avvertenza sotto — costa parecchio in dimensione file.</td></tr>
+<tr><td>grain_luma_weight</td><td>0.7</td><td><code>1</code> = grana di sola luminanza, <code>0</code> = rumore RGB pieno.</td></tr>
+<tr><td>grain_shadow_bias</td><td>0.5</td><td>Quanta più grana finisce nelle ombre.</td></tr>
+</tbody>
+</table></div>
+
+<div class="warn">
+<strong>La grana animata costa parecchio in banda.</strong> Misurato: ~4× il
+bitrate (7.1 MB vs 1.8 MB per 100 frame a 512²). Se l'mp4 finale è molto più
+grande del previsto, è quasi sempre questo. Metti <code>grain_animated =
+False</code> se h264 la trova troppo rumorosa da comprimere.
+</div>
+
+<h4>Aberrazione cromatica</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>aberration_enabled</td><td>True</td><td>On/off.</td></tr>
+<tr><td>aberration_strength</td><td>0.0018</td><td>Offset radiale fra i canali colore, come frazione del frame.</td></tr>
+<tr><td>seed</td><td>1234</td><td>Seed per la modalità grana fissa e per la sequenza di rumore per-frame.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py</code>. Puro post-processing, ottimo per iterare con <code>--mode still --time N</code>.</p>
+</section>
+
+<section id="camera">
+<h2>9 · <span class="mono">camera_config.py</span> <span class="pill wired">movimento</span></h2>
+<p class="path"><a href="../config/camera_config.py">config/camera_config.py</a> — <code>CameraConfig</code></p>
+<p class="dek">Push-in lento più una deriva, ritagliato dal canvas supersampled — nessun secondo ingrandimento.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>enabled</td><td>True</td><td><code>False</code> non costa nulla — nessun ritaglio applicato.</td></tr>
+<tr><td>zoom_start / zoom_end</td><td>1.0 / 0.86</td><td>Frazione del canvas visibile all'inizio/fine. <code>1.0</code> = canvas intero. Scendere = spingersi dentro (push-in).</td></tr>
+<tr><td>drift_x / drift_y</td><td>0.035 / -0.02</td><td>Deriva lenta del centro del ritaglio, come frazione del canvas, sull'intero video. Il ritaglio è sempre clampato dentro il canvas: a zoom 1.0 la deriva è necessariamente zero e si apre solo mentre il push-in avanza.</td></tr>
+<tr><td>easing</td><td>'ease_in_out'</td><td>Curva del push-in/deriva nel tempo.</td></tr>
+</tbody>
+</table></div>
+
+<div class="note">
+A <code>zoom_end</code> il ritaglio mantiene <code>render_supersample ×
+zoom_end</code> pixel per pixel di output — con il supersample di default (2)
+il push-in finisce comunque oversampled.
+</div>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> solo <code>render.py</code>.</p>
+</section>
+
+<section id="particles">
+<h2>10 · <span class="mono">particle_config.py</span> <span class="pill wired">rifinitura legacy</span></h2>
+<p class="path"><a href="../config/particle_config.py">config/particle_config.py</a> — <code>ParticleConfig</code></p>
+<p class="dek">Advection di particelle sul campo di velocità NCA. Teoria in <a href="Particle_Advection_Refinement.md">Particle_Advection_Refinement.md</a>. Verrà sostituito dallo sciame evolutivo (§11) quando quello sarà agganciato alla pipeline.</p>
+
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>particle_count</td><td>2000</td><td>Densità del flusso.</td></tr>
+<tr><td>particle_speed</td><td>10.0</td><td>Passo di advezione.</td></tr>
+<tr><td>particle_duration_seconds</td><td>10.0</td><td>Durata della sezione particelle (indipendente da <code>timing_config</code>).</td></tr>
+<tr><td>particle_trail_fade</td><td>1.0</td><td><code>1.0</code> mantiene scie piene; valori più bassi le fanno sfumare.</td></tr>
+<tr><td>particle_stretch_factor</td><td>2.0</td><td>Elongazione da motion-blur lungo la velocità.</td></tr>
+<tr><td>particle_radius</td><td>1</td><td>Dimensione del puntino in pixel.</td></tr>
+<tr><td>particle_outline_width</td><td>0</td><td>Raggio extra disegnato dietro ogni testa, nel colore <code>particle_outline_color</code>. <strong>Tienilo a 0</strong>: l'area del contorno cresce col quadrato del raggio, quindi anche 1 px copre 4× più pixel di una testa raggio-1 e affossa il frame finale in una massa scura.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note">
+I colori delle particelle sono campionati dall'<strong>immagine target</strong>, non dall'output NCA, quindi la palette della sorgente attraversa fino al frame finale. Le aree trasparenti del target vengono appiattite sullo sfondo di render prima del campionamento, così le particelle che escono dalla sagoma restano invisibili invece di dipingere il retro nero del PNG.
+</p>
+
+<p class="note"><strong>Rilancia dopo una modifica:</strong> <code>python run_particles.py</code> riusa i frame NCA esistenti senza rigenerarli — molto più veloce che <code>--mode combined</code> per iterare solo su questi parametri.</p>
+</section>
+
+<section id="swarm">
+<h2>11 · <span class="mono">swarm_config.py</span> <span class="pill standalone">stage 3 — non ancora agganciato alla pipeline</span></h2>
+<p class="path"><a href="../config/swarm_config.py">config/swarm_config.py</a> — <code>SwarmConfig</code></p>
+<p class="dek">
+Sciame evolutivo che dipinge sopra il tessuto NCA: ogni agente porta un gene di
+colore, si muove, deposita pigmento, vive finché ciò che dipinge migliora
+l'immagine. Design completo in <a href="Evolutionary_Swarm.md">Evolutionary_Swarm.md</a>
+— qui solo l'effetto di ogni manopola, ordinato per impatto visivo come nel
+§15 del documento di design.
+</p>
+
+<div class="warn">
+<strong>Non ancora collegato al resto della pipeline.</strong> Questi
+parametri vivono nel laboratorio isolato (<code>swarm/lab.py</code>), non in
+<code>render.py</code>. Cambiarli non richiede rilanciare nessuno stadio
+esistente — si esegue il lab a parte.
+</div>
+
+<h4>Scala e device</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>work_size</td><td>256</td><td>Risoluzione di lavoro. Scala lab; produzione tipica 512.</td></tr>
+<tr><td>population_cap</td><td>4096</td><td>Tetto di agenti. Scala lab; produzione 20-50k. Più alto = copertura più veloce ma meno "disegnata".</td></tr>
+<tr><td>min_population_fraction</td><td>0.05</td><td>Pavimento di popolazione, come frazione di <code>population_cap</code> — sotto questa soglia si ripopola.</td></tr>
+<tr><td>device</td><td>'cpu'</td><td>A 4096 agenti su 256² il lavoro per step è piccolo e domina l'overhead di lancio kernel: la CPU può risultare più veloce della GPU in modalità <code>live</code>. Misura, non assumere.</td></tr>
+<tr><td>seed</td><td>0</td><td>Seed RNG — riproducibilità bit-esatta a parità di device.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Percezione e movimento</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>sensor_angle</td><td>0.6 rad</td><td>Forma delle tracce: reti larghe e ramificate vs filamenti stretti.</td></tr>
+<tr><td>sensor_distance</td><td>6.0 px</td><td>Portata dei tre sensori davanti all'agente.</td></tr>
+<tr><td>w_nutrient</td><td>1.0</td><td>Peso del nutriente (tessuto NCA) nel campo di attrattività.</td></tr>
+<tr><td>w_crowd</td><td>0.0 (off)</td><td>Repulsione dalla densità locale di agenti. Un valore piccolo &gt;0 distribuisce la fame — il difetto tipico senza questo termine è l'ammassamento dove il cibo è appena stato trovato, con chi arriva secondo che mangia zero.</td></tr>
+<tr><td>guidance</td><td>0.0</td><td><strong>Non alzare mai per render reali</strong> — è il "cheat knob" (§2.2 del design doc): far leggere agli agenti il campo d'errore nello spazio è barare. Convergenza più rapida ma esposto solo per misurare quanto costa l'onestà, non per usarlo.</td></tr>
+<tr><td>rotation_mode</td><td>'proportional'</td><td><code>'proportional'</code>: virate morbide, curve continue — legge come pennellata. <code>'classic'</code>: Physarum canonico, nervoso, a scatti.</td></tr>
+<tr><td>rotation_angle</td><td>0.5 rad</td><td>Reattività della virata: tracce nervose (alto) vs curve ampie (basso).</td></tr>
+<tr><td>angle_noise</td><td>0.15 rad</td><td>Jitter angolare sempre attivo. Senza, in campo piatto gli agenti vanno dritti all'infinito e la copertura è a strisce.</td></tr>
+<tr><td>tumble_enabled</td><td>True</td><td>Run-and-tumble sul proprio guadagno (§5.2b) — l'unico meccanismo che rende efficiente il singolo agente invece della sola popolazione. È chemiotassi da E. coli: se sto mangiando vado dritto, altrimenti giro a caso.</td></tr>
+<tr><td>tumble_threshold</td><td>0.0</td><td>Sotto questa variazione di guadagno, l'agente fa tumble.</td></tr>
+<tr><td>tumble_angle</td><td>1.2 rad</td><td>Ampiezza della virata casuale nel tumble. Insieme a <code>tumble_threshold</code>, quanto l'agente si intestardisce prima di cambiare zona.</td></tr>
+<tr><td>speed</td><td>1.0 px/step</td><td>Velocità di avanzamento alla scala di lavoro.</td></tr>
+<tr><td>boundary_mode</td><td>'reflect'</td><td>Bordi del canvas: <code>'reflect'</code> rimbalza (l'agente resta vivo); <code>'clamp_random'</code> ferma e rigira. Mai wrap-around: teletrasporterebbe pigmento da un lato all'altro del soggetto.</td></tr>
+<tr><td>nutrient_threshold</td><td>0.1</td><td>Sotto questa densità di tessuto, un agente è considerato "fuori dal tessuto".</td></tr>
+<tr><td>starvation_cost</td><td>0.02</td><td>Costo extra per step fuori dal tessuto — barriera morbida: si può sconfinare ma si paga, invece di un muro rigido.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Deposito e metabolismo</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>brush_radius</td><td>1.5 px</td><td>Larghezza della pennellata (kernel gaussiano, σ = raggio/2). Alto = tratto grasso, meno dettaglio, più costo.</td></tr>
+<tr><td>deposit_alpha</td><td>0.15</td><td>Opacità del singolo tratto — da acquerello stratificato (basso) a tempera piena (alto).</td></tr>
+<tr><td>deposit_pheromone</td><td>1.0</td><td>Quanto feromone lascia ogni deposito, a parità di kernel.</td></tr>
+<tr><td>fitness_scale</td><td>1</td><td>Scala a cui si misura l'errore (1 pixel ogni N). La manopola con più impatto: da fedele a impressionista — errore misurato su un'immagine ridotta produce pennellate larghe e gestuali.</td></tr>
+<tr><td>tolerance</td><td>0.02</td><td>Distanza OKLab sotto la quale un pixel non nutre più nessuno. Primo parametro da tarare: controlla se il sistema converge a copiare esattamente il target (fotocopiatrice) o si ferma prima in modo stilizzato.</td></tr>
+<tr><td>error_metric</td><td>'l2'</td><td><code>'l2'</code>: distanza percettiva uniforme. <code>'l2_sq'</code>: coda pesante, premia molto la correzione di errori grandi e ignora quelli piccoli — resa più contrastata, meno rifinita.</td></tr>
+<tr><td>gain_scale</td><td>1.0</td><td>Moltiplicatore del guadagno energetico da errore corretto.</td></tr>
+<tr><td>cost_deposit</td><td>0.02</td><td>Costo proporzionale alla massa di pigmento depositata (non fisso per step) — chiude la "degenerazione golosa": ridipingere un pixel già giusto rende zero ma costa pieno.</td></tr>
+<tr><td>cost_life</td><td>0.005</td><td>Costo fisso per step, indipendente da cosa fa l'agente.</td></tr>
+<tr><td>energy_cap</td><td>3.0</td><td>Tetto all'energia — senza, un agente fortunato accumula riserva enorme e diventa immortale in una zona ormai sterile.</td></tr>
+<tr><td>max_age</td><td>None</td><td><code>None</code> = nessun taglio netto per senescenza.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Morte, riproduzione, invecchiamento del pigmento</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>initial_energy</td><td>1.0</td><td>Energia di un nuovo agente (nato o ripopolato).</td></tr>
+<tr><td>repopulation_mode</td><td>'nutrient'</td><td>Dove nascono gli slot ripopolati sotto il pavimento di popolazione. <strong>Mai <code>'error'</code></strong>: far nascere agenti dove l'errore è alto sarebbe leggere il target — il barare che tutto il design evita, mascherato da dettaglio implementativo.</td></tr>
+<tr><td>reproduction_threshold</td><td>1.5</td><td>Energia minima per riprodursi. Più alto = popolazione più selettiva, ricambio più lento.</td></tr>
+<tr><td>mutation_sigma</td><td>0.02 (OKLab)</td><td>Ampiezza dell'esplorazione cromatica. Più alto = più varietà, convergenza più lenta.</td></tr>
+<tr><td>birth_jitter</td><td>1.5 px</td><td><strong>Tasso di mutazione della posizione</strong>, non un dettaglio estetico — la posizione si eredita con mutazione esattamente come il colore. Piccolo = stirpi che esplorano; a 0 i territori si fossilizzano.</td></tr>
+<tr><td>birth_dir_sigma</td><td>0.3 rad</td><td>Varianza della direzione iniziale del figlio.</td></tr>
+<tr><td>decay_min (λ_min)</td><td>0.002</td><td><strong>Non deve mai essere zero.</strong> È il ricambio metabolico del quadro: a 0 il quadro si cristallizza, lo sciame muore di fame, fine. A &gt;0 il quadro perde lentamente definizione ovunque, il che rigenera cibo di continuo e tiene viva la popolazione — il prezzo è che l'errore non arriva mai a zero.</td></tr>
+<tr><td>decay_max (λ_max)</td><td>0.05</td><td>Quanto in fretta sparisce il pigmento sbagliato verso <code>base</code> — l'autopulizia del canvas.</td></tr>
+<tr><td>decay_e_ref</td><td>0.15</td><td>Scala di errore a cui λ satura verso λ_max.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Respiro dei campi e clima</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>evaporation</td><td>0.95</td><td>Memoria del feromone: tracce persistenti e ordinate (alto) vs sciame nervoso (basso).</td></tr>
+<tr><td>pheromone_diffuse</td><td>True</td><td>Il feromone si sfoca (blur 3×3) prima di evaporare — così una traccia lasciata è già spalmata quando un altro agente la annusa allo step successivo.</td></tr>
+<tr><td>climate_cost_life</td><td>ClimateCurve(0.01, 0.01)</td><td><code>start == end</code> = costante. Curva nel tempo del costo di vita — più alto verso la fine anticipa la carestia e comprime l'arco narrativo nei secondi assegnati.</td></tr>
+<tr><td>climate_gain_scale</td><td>ClimateCurve(1.0, 1.0)</td><td>Curva del guadagno energetico nel tempo.</td></tr>
+<tr><td>climate_mutation_sigma</td><td>ClimateCurve(0.03, 0.01, ease_in_out)</td><td>Mutazione alta all'inizio (esplorazione), bassa alla fine (rifinitura) — il classico annealing, con lettura visiva: da pennellate audaci a ritocchi.</td></tr>
+</tbody>
+</table></div>
+
+<h4>Tempistica della simulazione</h4>
+<div class="overflow"><table class="params">
+<thead><tr><th>Parametro</th><th>Default</th><th>Effetto</th></tr></thead>
+<tbody>
+<tr><td>sim_steps</td><td>800</td><td>Passi di simulazione totali. Indipendente da <code>fps</code>: se l'evoluzione ha bisogno di più step di quanti ne entrino nei secondi previsti, si simula più a lungo e si accelera in riproduzione.</td></tr>
+<tr><td>step_stride</td><td>1</td><td>Scrive un frame ogni N step — permette di renderizzare migliaia di step di simulazione in poche centinaia di frame video, al solo costo del tempo di calcolo.</td></tr>
+<tr><td>fps</td><td>30</td><td>Framerate del video di uscita del lab.</td></tr>
+</tbody>
+</table></div>
+
+<p class="note">
+<strong>Ogni <code>ClimateCurve</code></strong> accetta <code>{start, end,
+easing}</code>: <code>start == end</code> significa "costante". Passare da un
+parametro fisso a uno annealed è quindi una modifica di due numeri, non di
+codice — comodo per il confronto A/B in modalità <code>compare</code> del
+lab.
+</p>
+
+<p class="note"><strong>Come iterare:</strong> <code>swarm/lab.py</code> ha tre modalità — <code>live</code> (finestra interattiva con trackbar sui parametri caldi: <code>deposit_alpha</code>, <code>mutation_sigma</code>, <code>cost_life</code>, <code>evaporation</code>, <code>tolerance</code>, <code>brush_radius</code>), <code>sweep</code> (griglia headless con contact sheet) e <code>compare</code> (due config affiancate, stesso seed). Vedi §11.2 di <a href="Evolutionary_Swarm.md">Evolutionary_Swarm.md</a>.</p>
+</section>
+
+<section id="cheatsheet">
+<h2>Cheatsheet: cosa tocco per...</h2>
+<div class="overflow"><table class="params">
+<thead><tr><th>Voglio...</th><th>Config</th><th>Poi rilancio</th></tr></thead>
+<tbody>
+<tr><td>Un albero più fitto/rado</td><td><code>sca_config.num_attractors</code>, <code>influence_radius</code></td><td><code>train_sca.py</code> → <code>train_nca.py</code> → <code>render.py</code></td></tr>
+<tr><td>Rami più spessi/sottili in modo realistico</td><td><code>render_config.SCARenderConfig.branch_width_mode/gamma</code></td><td>solo <code>render.py</code></td></tr>
+<tr><td>Un colore di sfondo diverso</td><td><code>palette_config.background_rule</code> o override manuale in <code>palette</code></td><td>solo <code>render.py</code></td></tr>
+<tr><td>Cambiare quando entra l'NCA / lo sciame</td><td><code>timing_config.py</code></td><td>solo <code>render.py --mode timeline</code></td></tr>
+<tr><td>Il file mp4 troppo pesante</td><td><code>grading_config.grain_animated = False</code></td><td>solo <code>render.py</code></td></tr>
+<tr><td>Il render troppo lento</td><td><code>pipeline.render_supersample = 1</code>, o <code>nca_render.cells.enabled = False</code></td><td>solo <code>render.py</code></td></tr>
+<tr><td>Una crescita NCA più stabile a lungo termine</td><td><code>nca_config.use_pattern_pool/pool_size</code></td><td><code>train_nca.py</code></td></tr>
+<tr><td>Calibrare cellularità/luce/grading senza sprecare un video intero</td><td>qualsiasi render config</td><td><code>render.py --mode still --time N</code></td></tr>
+<tr><td>Iterare solo sulle particelle</td><td><code>particle_config.py</code></td><td><code>run_particles.py</code></td></tr>
+<tr><td>Provare lo sciame evolutivo</td><td><code>swarm_config.py</code></td><td><code>swarm/lab.py</code> (non ancora in <code>render.py</code>)</td></tr>
+</tbody>
+</table></div>
+
+<p>Per il resto — setup, comandi di ogni modalità di render, workflow tipici, troubleshooting — vedi <a href="USAGE.md">USAGE.md</a>.</p>
+
+</section>
+
+<footer>
+  <p><a class="top-link" href="#come-funzionano">↑ torna in cima</a> · <a href="USAGE.md">USAGE.md</a> · <a href="PLAN.md">PLAN.md</a> · <a href="Evolutionary_Swarm.md">Evolutionary_Swarm.md</a></p>
+</footer>
+
+</main>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  var stored = localStorage.getItem('config-ref-theme');
+  if (stored) {
+    root.setAttribute('data-theme', stored);
+    btn.textContent = 'tema: ' + stored;
+  }
+  btn.addEventListener('click', function () {
+    var current = root.getAttribute('data-theme');
+    var next;
+    if (!current) {
+      next = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+    } else {
+      next = current === 'dark' ? 'light' : 'dark';
+    }
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('config-ref-theme', next);
+    btn.textContent = 'tema: ' + next;
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -12,7 +12,6 @@ from config.render_config import (
 )
 from .sca_renderer import SCARenderer
 from .nca_renderer import NCARenderer, composite
-from .combined_renderer import CombinedRenderer
 from .timeline import TimelineRenderer, StageLayer, window_progress
 from .cells import CellPainter, cellularity_at
 from .lighting import apply_lighting

@@ -4,7 +4,6 @@ mechanism; `Simulation` is the only place that calls them in the order the
 design doc specifies.
 """
 
-from dataclasses import dataclass
 from typing import List
 
 import torch
@@ -12,19 +11,11 @@ import torch
 from config.swarm_config import SwarmConfig
 from swarm.agents import AgentState, perceive, rotate, advance, deposit, spawn_agents
 from swarm.fields import Fields
+from swarm.metrics import StepMetrics, collect
 from swarm.selection import consume, apply_costs, kill_and_repopulate, reproduce
 from swarm.colorspace import oklab_to_srgb, srgb_to_oklab
 
-
-@dataclass
-class StepMetrics:
-    """One row of the §12 diagnostics."""
-    step: int
-    mean_error: float
-    population: int
-    gene_diversity: float
-    total_energy: float
-    mean_gain: float
+__all__ = ['Simulation', 'StepMetrics']
 
 
 class Simulation:
@@ -50,6 +41,13 @@ class Simulation:
 
         self.step_count = 0
         self.history: List[StepMetrics] = []
+        self._pending_births = 0
+        self._pending_deaths = 0
+
+        # The error of the untouched starting canvas. Everything the swarm does
+        # is judged against this: it is what stage 2 already achieved for free.
+        self.baseline_error = float(self.fields.compute_error(raw=True).mean().item())
+        self.population_floor = int(config.min_population_fraction * config.population_cap)
 
     @classmethod
     def from_srgb(cls, config: SwarmConfig, target_srgb: torch.Tensor, base_srgb: torch.Tensor,
@@ -66,13 +64,11 @@ class Simulation:
         return min(1.0, self.step_count / max(1, self.config.sim_steps))
 
     def _climate_values(self):
-        t = self._climate_t()
-        cfg = self.config
-        return (
-            cfg.climate_cost_life.value_at(t),
-            cfg.climate_gain_scale.value_at(t),
-            cfg.climate_mutation_sigma.value_at(t),
-        )
+        """
+        `(cost_life, gain_scale, mutation_sigma)` for this step. The curves are
+        multipliers on the config scalars -- see `SwarmConfig.climate_at`.
+        """
+        return self.config.climate_at(self._climate_t())
 
     # ------------------------------------------------------------ one step (§5)
 
@@ -95,34 +91,51 @@ class Simulation:
         gain_i = consume(self.agents, splat, error_before, error_after)
         apply_costs(self.agents, splat, gain_i, off_tissue, cfg, gain_scale, cost_life)
 
-        kill_and_repopulate(self.agents, self.fields, cfg, self.rng, mutation_sigma)
-        reproduce(self.agents, self.fields, cfg, mutation_sigma, self.rng)
+        deaths = kill_and_repopulate(self.agents, self.fields, cfg, self.rng, mutation_sigma)
+        births = reproduce(self.agents, self.fields, cfg, mutation_sigma, self.rng)
 
         self.fields.age_pigment(error_after)
         self.fields.breathe()
 
         self.step_count += 1
-        self._record_metrics(gain_i)
+        self._record_metrics(gain_i, births, deaths)
 
     # ------------------------------------------------------------ diagnostics (§12)
 
-    def _record_metrics(self, gain_i: torch.Tensor):
-        alive = self.agents.alive
-        n_alive = int(alive.sum().item())
+    def _record_metrics(self, gain_i: torch.Tensor, births: int, deaths: int):
+        """
+        Append a §12 row, honouring `metrics_stride`. The last step of a run is
+        always recorded, so a summary never has to interpolate its final value.
 
-        mean_error = float(self.fields.compute_error(raw=True).mean().item())
-        total_energy = float(self.agents.energy[alive].sum().item()) if n_alive else 0.0
-        mean_gain = float(gain_i[alive].mean().item()) if n_alive else 0.0
-        gene_diversity = float(self.agents.gene[alive].var(dim=0).sum().item()) if n_alive > 1 else 0.0
+        Births and deaths accumulate across skipped steps rather than being
+        sampled: they are counts, and a sampled count is just a wrong count.
+        """
+        self._pending_births += births
+        self._pending_deaths += deaths
 
-        self.history.append(StepMetrics(
-            step=self.step_count, mean_error=mean_error, population=n_alive,
-            gene_diversity=gene_diversity, total_energy=total_energy, mean_gain=mean_gain,
-        ))
+        stride = max(1, self.config.metrics_stride)
+        is_last = self.step_count >= self.config.sim_steps
+        if self.step_count % stride and not is_last:
+            return
+
+        self.history.append(collect(self, gain_i, self._pending_births, self._pending_deaths))
+        self._pending_births = self._pending_deaths = 0
 
     # ------------------------------------------------------------ rendering
 
+    def _render_srgb(self, field_oklab: torch.Tensor) -> torch.Tensor:
+        """(H, W, 3) uint8 sRGB of any OKLab field."""
+        rgb = oklab_to_srgb(field_oklab)
+        return (rgb * 255.0 + 0.5).clamp(0, 255).byte()
+
     def render_canvas_srgb(self) -> torch.Tensor:
         """(H, W, 3) uint8 sRGB of the current canvas."""
-        rgb = oklab_to_srgb(self.fields.canvas)
-        return (rgb * 255.0 + 0.5).clamp(0, 255).byte()
+        return self._render_srgb(self.fields.canvas)
+
+    def render_base_srgb(self) -> torch.Tensor:
+        """The starting canvas -- what stage 2 handed over, the baseline to beat."""
+        return self._render_srgb(self.fields.base)
+
+    def render_target_srgb(self) -> torch.Tensor:
+        """Ground truth. For side-by-side artefacts only; no mechanism may read this."""
+        return self._render_srgb(self.fields.target)

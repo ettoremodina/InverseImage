@@ -18,8 +18,8 @@ from .nca_config import NCAConfig
 from .palette_config import PaletteConfig
 from .sca_config import SCAConfig
 from .render_config import SCARenderConfig, NCARenderConfig, ScaffoldFadeConfig
-from .particle_config import ParticleConfig
 from .seeding_config import ProgressiveSeedingConfig
+from .swarm_config import SwarmConfig, SwarmStageConfig
 from .timing_config import TimingConfig
 
 @dataclass
@@ -38,7 +38,6 @@ class PipelineConfig:
     sca: SCAConfig = field(default_factory=SCAConfig)
     sca_render: SCARenderConfig = field(default_factory=SCARenderConfig)
     nca_render: NCARenderConfig = field(default_factory=NCARenderConfig)
-    particles: ParticleConfig = field(default_factory=ParticleConfig)
 
     palette: PaletteConfig = field(default_factory=PaletteConfig)
     grading: GradingConfig = field(default_factory=GradingConfig)
@@ -47,15 +46,18 @@ class PipelineConfig:
     scaffold: ScaffoldFadeConfig = field(default_factory=ScaffoldFadeConfig)
     seeding: ProgressiveSeedingConfig = field(default_factory=ProgressiveSeedingConfig)
 
+    # Stage 3. `swarm` is the simulation (calibrated in the lab, §11);
+    # `swarm_stage` is how it plugs into the timeline (PLAN §3.3).
+    swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    swarm_stage: SwarmStageConfig = field(default_factory=SwarmStageConfig)
+
     # ==================== PIPELINE SPECIFIC ====================
     # Seed positions from SCA (None = center seed, path = load from json)
     seed_positions_path: Optional[str] = None
 
-    # Legacy combined animation settings (mode 'combined').
-    # The timeline mode ignores these and uses `timing` instead.
+    # Length of the standalone `nca` / `sca` preview clips. The timeline
+    # ignores this and uses `timing` instead.
     total_video_duration_seconds: float = 20.0
-    sca_percentage: float = 0.4  # 40% of video for SCA growth
-    nca_percentage: float = 0.6  # 60% of video for NCA growth
 
     # Animation
     animation_steps: int = 100
@@ -97,6 +99,8 @@ class PipelineConfig:
         self.nca.device = self.device
         self.nca.animation_steps = self.animation_steps
         
+        self.swarm.device = self.device
+
         self.sca.mask_image_path = self.target_image
         self.sca.output_dir = str(self.sca_output_dir)
         self.sca.random_seed = self.random_seed
@@ -207,10 +211,6 @@ class PipelineConfig:
     @property
     def render_nca_gif_path(self) -> Path:
         return self.render_output_dir / f'{self.image_name}_nca.gif'
-    
-    @property
-    def render_combined_gif_path(self) -> Path:
-        return self.render_output_dir / f'{self.image_name}_combined.gif'
     
     # ==================== SEED POSITIONS ====================
     def load_seed_positions(self) -> Optional[List[Tuple[int, int]]]:

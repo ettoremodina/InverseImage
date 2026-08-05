@@ -102,3 +102,31 @@ class Fields:
 
         if nutrient is not None:
             self.nutrient = nutrient.to(self.device)
+
+    # ------------------------------------------------------------ PLAN 3.3 seam
+
+    def refresh_base(self, base_oklab: torch.Tensor, nutrient: torch.Tensor):
+        """
+        Adopt a new stage-2 output mid-run -- the one seam between the lab and
+        the timeline (PLAN §3.3).
+
+        In the lab `base` is fixed: the surrogate is computed once and the swarm
+        works against it forever. In the timeline the NCA is *still growing*
+        while the swarm window is open, so `base` is a moving target and the
+        nutrient mask grows with it.
+
+        Where tissue has just appeared, the canvas is pulled onto the new base
+        in proportion to how much nutrient arrived. Without that the swarm would
+        show stale colour -- whatever the canvas happened to hold before the
+        tissue existed -- through freshly grown flesh. Pigment the swarm has
+        already earned on established tissue is left alone, because there the
+        nutrient delta is ~0.
+        """
+        base_oklab = base_oklab.to(self.device)
+        nutrient = nutrient.to(self.device)
+
+        adopt = (nutrient - self.nutrient).clamp(0.0, 1.0).unsqueeze(-1)
+        self.canvas = self.canvas * (1.0 - adopt) + base_oklab * adopt
+
+        self.base = base_oklab
+        self.nutrient = nutrient

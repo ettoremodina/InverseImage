@@ -65,16 +65,20 @@ def apply_costs(agents: AgentState, splat: Splat, gain_i: torch.Tensor, off_tiss
 # ==================== 5.7 death & repopulation ====================
 
 def kill_and_repopulate(agents: AgentState, fields, config: SwarmConfig, rng: torch.Generator,
-                         mutation_sigma: float):
+                         mutation_sigma: float) -> int:
     """
     Agents at negative energy, or past `max_age` when set, die. If the
     population then falls below the floor, empty slots are refilled from
     `nutrient` -- never from `error`, which would be exactly the cheating the
     target's veto-only rule forbids (§5.7).
+
+    Returns the number that died, which the §12 diagnostics need to tell a
+    healthy turnover apart from a population held up entirely by the floor.
     """
     dead = agents.alive & (agents.energy < 0)
     if config.max_age is not None:
         dead = dead | (agents.alive & (agents.age > config.max_age))
+    n_dead = int(dead.sum().item())
     agents.alive = agents.alive & ~dead
 
     min_population = int(config.min_population_fraction * config.population_cap)
@@ -86,11 +90,13 @@ def kill_and_repopulate(agents: AgentState, fields, config: SwarmConfig, rng: to
             spawn_agents(agents, fields, config, free[:need], rng, gene_source=fields.canvas,
                          mutation_sigma=mutation_sigma)
 
+    return n_dead
+
 
 # ==================== 5.8 reproduction ====================
 
 def reproduce(agents: AgentState, fields, config: SwarmConfig, mutation_sigma: float,
-              rng: torch.Generator):
+              rng: torch.Generator) -> int:
     """
     Agents above `reproduction_threshold` split their energy with a mutated
     child (§5.8): fission by halving, so reproduction is zero-sum on energy
@@ -98,6 +104,10 @@ def reproduce(agents: AgentState, fields, config: SwarmConfig, mutation_sigma: f
     assigned to eligible parents in random order, not by highest energy --
     the threshold already filters for fitness, so shuffling keeps exploration
     open instead of collapsing onto the fittest few.
+
+    Returns the number of births. Zero births for a whole run is the signature
+    of a starving economy (§13): without reproduction there is no heredity, and
+    the swarm is a random sprayer rather than an evolving population.
     """
     device = agents.device
     eligible = (agents.alive & (agents.energy > config.reproduction_threshold)).nonzero(as_tuple=True)[0]
@@ -105,7 +115,7 @@ def reproduce(agents: AgentState, fields, config: SwarmConfig, mutation_sigma: f
 
     n = min(int(eligible.shape[0]), int(free.shape[0]))
     if n == 0:
-        return
+        return 0
 
     order = torch.randperm(int(eligible.shape[0]), generator=rng, device=device)[:n]
     parents = eligible[order]
@@ -128,3 +138,5 @@ def reproduce(agents: AgentState, fields, config: SwarmConfig, mutation_sigma: f
     agents.alive[children] = True
     agents.gain_last[children] = 0.0
     agents.gain_prev[children] = 0.0
+
+    return n

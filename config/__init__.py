@@ -13,12 +13,12 @@ from .render_config import (
     LightingConfig,
     ScaffoldFadeConfig,
 )
-from .particle_config import ParticleConfig
 from .palette_config import PaletteConfig
 from .grading_config import GradingConfig
 from .camera_config import CameraConfig
 from .timing_config import TimingConfig, StageWindow
 from .seeding_config import ProgressiveSeedingConfig
+from .swarm_config import SwarmConfig, SwarmStageConfig, ClimateCurve
 
 __all__ = [
     'PipelineConfig',
@@ -31,11 +31,13 @@ __all__ = [
     'CellRenderConfig',
     'LightingConfig',
     'ScaffoldFadeConfig',
-    'ParticleConfig',
     'PaletteConfig',
     'GradingConfig',
     'CameraConfig',
     'TimingConfig',
     'StageWindow',
     'ProgressiveSeedingConfig',
+    'SwarmConfig',
+    'SwarmStageConfig',
+    'ClimateCurve',
 ]

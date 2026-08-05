@@ -44,3 +44,21 @@ class ProgressiveSeedingConfig:
     jitter: float = 0.02
 
     seed: int = 3
+
+    # ==================== smoothness ====================
+    # Two different things make seeding look abrupt, and these fix one each.
+
+    # 1. Each seed was written as a hard 0 -> 1 step, so it appeared at full
+    #    strength in a single frame. With `ramp_steps > 0` a seed fades in over
+    #    that many steps instead. The injection only ever raises a cell (max),
+    #    so the NCA's own growth is never clamped back down.
+    ramp_steps: int = 8
+    ramp_easing: str = 'ease_in_out'
+
+    # 2. Birth times come from branch depth, and the depth histogram is lumpy --
+    #    at the defaults 1000 seeds landed on 99 instants, with 33 seeds sharing
+    #    the worst one, so they popped in visible batches. 'rank' spaces the
+    #    seeds evenly over the window by their depth *order* instead of their
+    #    depth *value*, which keeps the tree-following sequence but removes the
+    #    clumping. 'time' is the old literal-depth behaviour.
+    distribute: str = 'rank'
