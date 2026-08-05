@@ -45,6 +45,12 @@ class StepMetrics:
     births: int                # reproductions (§5.8)
     deaths: int                # energy/age deaths (§5.7), before the floor refills
 
+    # Mean per-step ‖Δcanvas‖ on the tissue since the previous recorded row.
+    # This is the direct reading of §5.9's λ_min trade-off -- a picture that has
+    # settled has a small non-zero value, one that seethes has a large one, and
+    # one that has crystallised (which the design forbids) has zero.
+    canvas_delta: float = 0.0
+
 
 METRIC_FIELDS = tuple(f.name for f in dataclass_fields(StepMetrics))
 
@@ -79,7 +85,8 @@ class RunSummary:
 SUMMARY_FIELDS = tuple(f.name for f in dataclass_fields(RunSummary))
 
 
-def collect(sim, gain_i: torch.Tensor, births: int, deaths: int) -> StepMetrics:
+def collect(sim, gain_i: torch.Tensor, births: int, deaths: int,
+            canvas_delta: float = 0.0) -> StepMetrics:
     """
     Read one row off a live `Simulation`.
 
@@ -116,6 +123,7 @@ def collect(sim, gain_i: torch.Tensor, births: int, deaths: int) -> StepMetrics:
         reward_coverage=float((effective_error > 0).float().mean().item()),
         births=births,
         deaths=deaths,
+        canvas_delta=canvas_delta,
     )
 
 

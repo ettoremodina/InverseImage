@@ -38,11 +38,12 @@ Fasi 2 e 3 implementate (l'ordine è quello previsto in fondo al documento: lo s
 | (h) temporal_smoothing | **fatto** | 0.25 |
 | 3.1 timeline unica | **fatto** | [rendering/timeline.py](rendering/timeline.py), `--mode timeline` |
 | 3.2 semina progressiva | **fatto (passo 1)** | [nca/seeding.py](nca/seeding.py) + hook in `CAModel.forward`. Il passo 2 (retraining) si decide **guardando il render** |
-| 3.3 sovrapposizione NCA↔sciame | **aperto** | dipende dalla Fase 1; lo slot `swarm` nella timeline è già schedulato e vuoto |
+| 3.3 sovrapposizione NCA↔sciame | **fatto** | [swarm/stage.py](swarm/stage.py) + slot `swarm` in `timeline.render`; il `nutrient` è l'alpha NCA del frame corrente, quindi lo sciame vive solo dove c'è tessuto |
 | 3.4 impalcatura che sfuma | **fatto** | `ScaffoldFadeConfig`, entrambe le modalità (`alpha` di default, `time` per confronto) |
 | 3.5 camera | **fatto** | [rendering/camera.py](rendering/camera.py), disattivabile |
 | 3.6 timing parametrico | **fatto** | [config/timing_config.py](config/timing_config.py), con `validate()` che protegge il vincolo di sovrapposizione |
-| Fase 1 — sciame | **da fare** | `swarm/` non esiste ancora; `particles/` resta in piedi nel percorso `--mode combined` |
+| Fase 1 — sciame, motore | **fatto** | [swarm/](swarm/) al completo, `particles/` rimosso |
+| Fase 1 — sciame, taratura | **in corso, automatizzata** | i parametri non si tarano a mano (§13, "tuning permaloso"): criteri di successo, metriche di immagine e ricerca automatica in [Swarm_Tuning.md](docs/Swarm_Tuning.md) |
 
 Due note di merito emerse implementando, non previste dal piano:
 

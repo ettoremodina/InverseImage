@@ -19,6 +19,7 @@ from .camera_config import CameraConfig
 from .timing_config import TimingConfig, StageWindow
 from .seeding_config import ProgressiveSeedingConfig
 from .swarm_config import SwarmConfig, SwarmStageConfig, ClimateCurve
+from .tuning_config import Criterion, ObjectiveConfig, Param, TuningConfig
 
 __all__ = [
     'PipelineConfig',
@@ -40,4 +41,8 @@ __all__ = [
     'SwarmConfig',
     'SwarmStageConfig',
     'ClimateCurve',
+    'TuningConfig',
+    'ObjectiveConfig',
+    'Criterion',
+    'Param',
 ]

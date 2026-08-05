@@ -804,6 +804,13 @@ che senza cristallizzazione non vuol più dire niente.
 Vale anche come argomento: **lo stadio 3 avrà una curva di apprendimento come ce l'ha
 l'NCA.** È la prova che non è un effetto grafico.
 
+**Aggiunta dopo l'implementazione.** Queste metriche guardano la *popolazione* e non
+bastano a giudicare il *quadro*: non distinguono un run che ha ridipinto il soggetto da
+uno che l'ha spalmato, né una pennellata dal rumore. Le metriche di immagine
+(fedeltà mascherata al tessuto, dettaglio, coerenza del tratto, croma, sfarfallio), i
+criteri di successo che ne derivano e la suite che tara i parametri da sola stanno in
+[Swarm_Tuning.md](docs/Swarm_Tuning.md).
+
 ---
 
 ## 13. Come può fallire

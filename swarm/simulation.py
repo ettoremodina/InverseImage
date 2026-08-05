@@ -44,6 +44,12 @@ class Simulation:
         self._pending_births = 0
         self._pending_deaths = 0
 
+        # Reference copy for the per-step canvas change (§5.9). Kept at the
+        # last *recorded* step rather than the last step, so `metrics_stride`
+        # costs one clone per row instead of one per step.
+        self._canvas_mark = self.fields.canvas.clone()
+        self._steps_since_mark = 0
+
         # The error of the untouched starting canvas. Everything the swarm does
         # is judged against this: it is what stage 2 already achieved for free.
         self.baseline_error = float(self.fields.compute_error(raw=True).mean().item())
@@ -112,14 +118,29 @@ class Simulation:
         """
         self._pending_births += births
         self._pending_deaths += deaths
+        self._steps_since_mark += 1
 
         stride = max(1, self.config.metrics_stride)
         is_last = self.step_count >= self.config.sim_steps
         if self.step_count % stride and not is_last:
             return
 
-        self.history.append(collect(self, gain_i, self._pending_births, self._pending_deaths))
+        self.history.append(collect(self, gain_i, self._pending_births, self._pending_deaths,
+                                    self._canvas_change()))
         self._pending_births = self._pending_deaths = 0
+
+    def _canvas_change(self) -> float:
+        """Mean per-step ‖Δcanvas‖ on the tissue since the previous recorded row."""
+        delta = (self.fields.canvas - self._canvas_mark).norm(dim=-1)
+        # Recomputed rather than cached: in the timeline the tissue grows under
+        # the swarm (PLAN §3.3), so a mask taken at construction goes stale.
+        tissue = self.fields.nutrient > self.config.nutrient_threshold
+        total = tissue.sum()
+        mean = float((delta * tissue).sum().item() / float(total.item())) if total > 0 else 0.0
+
+        self._canvas_mark = self.fields.canvas.clone()
+        steps, self._steps_since_mark = max(1, self._steps_since_mark), 0
+        return mean / steps
 
     # ------------------------------------------------------------ rendering
 

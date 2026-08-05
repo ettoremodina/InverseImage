@@ -170,7 +170,13 @@ class SwarmStageConfig:
     # `preset` names an entry in config/lab_config.PRESETS. Production runs the
     # configuration the lab calibrated, by name, instead of a second copy of the
     # numbers that then drifts out of sync.
-    preset: str = 'rooted'
+    #
+    # `tuned` is the machine-calibrated one: it comes from
+    # config/tuned_swarm.json, which `swarm.tuning --adopt` writes and which is
+    # committed alongside the code. Set this to 'rooted' to go back to the last
+    # hand calibration -- measurably worse (docs/Swarm_Tuning.md §4), kept as
+    # the comparison the tuned one is read against.
+    preset: str = 'tuned'
 
     # The simulation runs at `work_size` and its layer is scaled to the canvas.
     # Running at full supersampled canvas resolution would multiply the agent

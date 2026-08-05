@@ -23,7 +23,7 @@ import json
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -33,6 +33,7 @@ from tqdm import tqdm
 from config.lab_config import LabConfig, SurrogateConfig
 from config.swarm_config import SwarmConfig, config_to_dict
 from swarm.metrics import RunSummary, StepMetrics, summarize, write_history_csv
+from swarm.quality import QualityMetrics, measure_simulation, quality_to_dict
 from swarm.simulation import Simulation
 from utils.log import get_logger
 
@@ -114,11 +115,13 @@ class RunResult:
     config: SwarmConfig
     summary: RunSummary
     history: List[StepMetrics]
+    quality: QualityMetrics         # what the finished picture is like (swarm/quality.py)
 
     canvas: np.ndarray              # (H, W, 3) uint8 RGB, final
     base: np.ndarray                # the surrogate the run started from
     target: np.ndarray              # ground truth
     frames: List[Tuple[int, np.ndarray]]   # (step, canvas) captures through the run
+    video: Optional[Path] = None    # mp4 of the run, when one was requested
 
 
 def _capture_steps(total: int, count: int) -> List[int]:
@@ -129,13 +132,20 @@ def _capture_steps(total: int, count: int) -> List[int]:
 
 
 def run_experiment(lab: LabConfig, name: str, overrides: Dict[str, Any] = None,
-                   doc: str = '', label: str = None, progress: bool = True) -> RunResult:
+                   doc: str = '', label: str = None, progress: bool = True,
+                   video_path=None, video_stride: int = 4, video_fps: int = 30,
+                   video_scale: int = 2, video_panels: bool = True) -> RunResult:
     """
     Run one configuration to completion and collect its artefacts.
 
     Reproducibility is by seed and device only (§11.3): the same `overrides` on
     the same machine produce the same canvas bit for bit, which is what makes a
     saved contact sheet worth more than a memory of the previous run.
+
+    Passing `video_path` also films the run. The recorder streams, so a long
+    film costs one frame of memory and roughly one canvas conversion per
+    `video_stride` steps -- cheap enough that the tuner can afford it on its
+    current best without perturbing the search budget.
     """
     config = lab.to_swarm_config(overrides)
     sim = make_simulation(config, lab.image, lab.surrogate)
@@ -146,6 +156,13 @@ def run_experiment(lab: LabConfig, name: str, overrides: Dict[str, Any] = None,
     captures = _capture_steps(config.sim_steps, lab.filmstrip_frames)
     frames: List[Tuple[int, np.ndarray]] = [(0, base)]
 
+    recorder = None
+    if video_path is not None:
+        from swarm.animate import VideoRecorder
+        recorder = VideoRecorder(video_path, fps=video_fps, scale=video_scale,
+                                 panels=video_panels, title=label or name)
+        recorder.add(sim)
+
     iterator = range(config.sim_steps)
     if progress:
         iterator = tqdm(iterator, desc=label or name, leave=False)
@@ -155,17 +172,25 @@ def run_experiment(lab: LabConfig, name: str, overrides: Dict[str, Any] = None,
         sim.step()
         if sim.step_count in captures:
             frames.append((sim.step_count, sim.render_canvas_srgb().cpu().numpy()))
+        if recorder is not None and sim.step_count % max(1, video_stride) == 0:
+            recorder.add(sim)
     wall_time = time.perf_counter() - start
 
     canvas = sim.render_canvas_srgb().cpu().numpy()
     frames.append((sim.step_count, canvas))
+
+    if recorder is not None:
+        recorder.add(sim)
+        recorder.close()
 
     summary = summarize(sim.history, sim.baseline_error, sim.population_floor, wall_time)
 
     return RunResult(
         name=name, label=label or name, doc=doc, overrides=dict(overrides or {}),
         config=config, summary=summary, history=sim.history,
+        quality=measure_simulation(sim),
         canvas=canvas, base=base, target=target, frames=frames,
+        video=Path(video_path) if video_path is not None else None,
     )
 
 
@@ -187,7 +212,8 @@ def write_run(result: RunResult, out_dir: Path) -> Path:
                    'config': config_to_dict(result.config)}, handle, indent=2)
 
     with open(out_dir / 'summary.json', 'w') as handle:
-        json.dump(asdict(result.summary), handle, indent=2)
+        json.dump({**asdict(result.summary),
+                   'quality': quality_to_dict(result.quality)}, handle, indent=2)
 
     return out_dir
 

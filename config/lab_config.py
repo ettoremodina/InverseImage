@@ -19,7 +19,9 @@ config: reading it tells you what the experiment changed, which is the thing
 you actually want to know six weeks later.
 """
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List
 
 from config.common import get_device
@@ -175,6 +177,40 @@ PRESETS: Dict[str, Preset] = {
 # is the one that works, then the looks built on it, then the cheat as a ceiling.
 SHOWCASE: List[str] = ['defaults', 'fed', 'rooted', 'impressionist',
                        'watercolour', 'filaments', 'famine', 'guided']
+
+
+# ---- the machine-calibrated preset (docs/Swarm_Tuning.md) ----
+#
+# `python -m swarm.tuning --adopt` writes its winner here. Loading it from JSON
+# instead of pasting the numbers into this file keeps the calibration a result
+# that a run produced and can reproduce, rather than a constant that gets typed
+# in once and then drifts away from the study that justified it. The file is
+# optional: without it there is simply no `tuned` preset, and everything else
+# behaves exactly as before.
+
+TUNED_PRESET_PATH = Path('config/tuned_swarm.json')
+
+
+def _load_tuned() -> Dict[str, Any]:
+    if not TUNED_PRESET_PATH.exists():
+        return {}
+    try:
+        with open(TUNED_PRESET_PATH) as handle:
+            return json.load(handle)
+    except (ValueError, OSError):
+        from utils.log import get_logger
+        get_logger(__name__).warning('Ignoring unreadable %s', TUNED_PRESET_PATH)
+        return {}
+
+
+_TUNED = _load_tuned()
+if _TUNED:
+    PRESETS['tuned'] = Preset(
+        doc='Machine-calibrated by `swarm.tuning` against the success criteria in '
+            f'config/tuning_config.py. Source of truth: {TUNED_PRESET_PATH}.',
+        overrides=_TUNED,
+    )
+    SHOWCASE.insert(3, 'tuned')     # next to `rooted`, the baseline it has to beat
 
 
 # ==================== studies (§11.2 sweep) ====================

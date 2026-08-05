@@ -119,6 +119,23 @@ Other modes:
 
 See [docs/Render_Pipeline.md](docs/Render_Pipeline.md) for how a frame is built.
 
+### Stage 3: calibrating the swarm
+
+The evolutionary swarm has a dozen coupled parameters, so it is calibrated in
+isolation before it is trusted inside a render — by hand in the laboratory, or
+automatically against measurable success criteria:
+
+```bash
+python -m swarm.lab --mode showcase          # the curated presets, side by side
+python -m swarm.tuning --adopt               # search for a configuration, then install it
+```
+
+The tuner writes a self-contained report (curves, scorecard, films of the best
+configuration every few generations) under `outputs/swarm/tuning/`, and `--adopt`
+makes the winner available as the `tuned` preset that
+`SwarmStageConfig.preset` can point at. Criteria, metrics and the search itself
+are documented in [docs/Swarm_Tuning.md](docs/Swarm_Tuning.md).
+
 To tweak particle parameters without regenerating the NCA frames:
 ```bash
 python run_particles.py
@@ -132,6 +149,7 @@ python run_particles.py
 *   `sca/`: Space Colonization Algorithm logic (Tree, Branch, Attractor).
 *   `nca/`: Neural Cellular Automata model, training loop (PyTorch) and progressive seeding.
 *   `particles/`: Particle advection and flow field rendering (legacy stage 3).
+*   `swarm/`: Stage 3 — the evolutionary swarm, its laboratory and its tuning suite.
 *   `rendering/`: Animation engines, the timeline, cells, lighting, camera, exporters.
 *   `color/`: Palette extraction from the reference image and the shared grading pass.
 *   `utils/`: Logging.
