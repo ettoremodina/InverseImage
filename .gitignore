@@ -7,11 +7,12 @@ venv/
 # Generated pipeline output
 outputs/
 
-# AgentWorkflow junctions are machine-local and recreated from
-# .agents/control-center.json. Add a targeted exception if a skill is localized.
-.agents/skills/
+# >>> agentworkflow
+# Shared skills are links to AgentWorkflow, recreated by its scripts/project.ps1 -Action Link.
+# Project-owned skills stay tracked through the exceptions below.
+.agents/skills/*
 .agents/memory/global/
-
-# AgentWorkflow junctions are machine-local and recreated from
-# .agents/control-center.json. Add a targeted exception if a skill is localized.
-.claude/skills/
+.claude/skills
+.claude/memory
+.claude/settings.local.json
+# <<< agentworkflow
