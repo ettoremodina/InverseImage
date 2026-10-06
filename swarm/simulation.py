@@ -120,8 +120,12 @@ class Simulation:
         self._pending_deaths += deaths
         self._steps_since_mark += 1
 
+        # `==`, not `>=`: a simulation that runs past its planned `sim_steps`
+        # -- the lab's live mode, or a timeline whose window turns out longer
+        # than the estimate -- would otherwise treat every step from then on as
+        # the last one and record a row for each, ignoring the stride entirely.
         stride = max(1, self.config.metrics_stride)
-        is_last = self.step_count >= self.config.sim_steps
+        is_last = self.step_count == self.config.sim_steps
         if self.step_count % stride and not is_last:
             return
 

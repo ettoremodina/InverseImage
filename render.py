@@ -198,7 +198,8 @@ def build_timeline(pipeline):
     )
 
 
-def render_timeline(pipeline, reuse_frames: bool = False, swarm: bool = True):
+def render_timeline(pipeline, reuse_frames: bool = False, swarm: bool = True,
+                    swarm_overrides: dict = None):
     """
     The single overlapped timeline (PLAN 3.1-3.6).
 
@@ -231,7 +232,7 @@ def render_timeline(pipeline, reuse_frames: bool = False, swarm: bool = True):
     swarm_stage = None
     if swarm:
         from swarm.stage import build_swarm_stage
-        swarm_stage = build_swarm_stage(pipeline)
+        swarm_stage = build_swarm_stage(pipeline, swarm_overrides)
         if swarm_stage is not None:
             stages['swarm'] = swarm_stage
 
@@ -244,12 +245,25 @@ def render_timeline(pipeline, reuse_frames: bool = False, swarm: bool = True):
     return output_path
 
 
-def render_still(pipeline, time: float, reuse_frames: bool = True):
+def render_still(pipeline, time: float, reuse_frames: bool = True,
+                 swarm: bool = True, swarm_overrides: dict = None):
     """
     One graded frame at `time`, for calibration.
 
     Tuning cellularity, lighting and grading on a video is a waste of minutes;
     this renders the single frame the parameters are being judged on.
+
+    Stage 3 is included, and it is the reason this mode is worth using for
+    swarm work: the swarm's steps still have to run (its canvas is a
+    simulation, not a function of time), but only one frame is rasterised, and
+    rasterisation is what makes the video slow. `swarm_overrides` changes the
+    swarm's parameters for this frame only -- nothing is written back to
+    config, so a sweep is a shell loop and not a series of edits.
+
+    One caveat, logged at render time: the tissue is held at the value it has
+    at `time` for the whole warm-up rather than growing under the swarm. After
+    the NCA window closes (16s by default) that is exact; before it, the frame
+    shows slightly more swarm work than the video would.
     """
     require_sca_artifacts(pipeline)
 
@@ -263,11 +277,28 @@ def render_still(pipeline, time: float, reuse_frames: bool = True):
     if nca_data is None:
         nca_data = generate_nca_frames(pipeline, sca_data, seed_positions, steps)
 
-    frame = build_timeline(pipeline).render_still(sca_data, nca_data, time)
+    stages = {}
+    swarm_stage = None
+    if swarm:
+        from swarm.stage import build_swarm_stage
+        swarm_stage = build_swarm_stage(pipeline, swarm_overrides)
+        if swarm_stage is not None:
+            stages['swarm'] = swarm_stage
+        if time < pipeline.timing.nca.end:
+            logger.warning('Still at t=%.1fs is inside the NCA window (ends at %.1fs): '
+                           'the swarm is warmed against the tissue as it is now, so the '
+                           'frame flatters it slightly. Calibrate at or after %.1fs.',
+                           time, pipeline.timing.nca.end, pipeline.timing.nca.end)
 
+    frame = build_timeline(pipeline).render_still(sca_data, nca_data, time, stages=stages)
+
+    suffix = '' if swarm else '_noswarm'
     output_path = (pipeline.render_output_dir /
-                   f'{pipeline.image_name}_still_{time:.1f}s.png')
+                   f'{pipeline.image_name}_still_{time:.1f}s{suffix}.png')
     imageio.imwrite(str(output_path), frame)
+
+    if swarm_stage is not None:
+        swarm_stage.report()
     logger.info('Saved still frame at t=%.1fs to %s', time, output_path)
     return output_path
 
@@ -337,6 +368,16 @@ def render_sca(pipeline):
     return sca_data
 
 
+def _parse_value(text: str):
+    """CLI values stay strings only when they have to; `set_param` coerces after."""
+    for cast in (int, float):
+        try:
+            return cast(text)
+        except ValueError:
+            continue
+    return text
+
+
 def main():
     parser = argparse.ArgumentParser(description="Render animations for the NCA-SCA pipeline.")
     parser.add_argument(
@@ -358,9 +399,30 @@ def main():
     )
     parser.add_argument(
         '--no-swarm', action='store_true',
-        help='Render the timeline without stage 3, for comparing against it.'
+        help='Render without stage 3, for comparing against it.'
+    )
+    parser.add_argument(
+        '--agents', type=int, default=None,
+        help='Stage 3 population for this render only, as a literal count '
+             '(bypasses the resolution scaling). Shorthand for '
+             '--swarm-set population_cap=N.'
+    )
+    parser.add_argument(
+        '--swarm-set', action='append', metavar='PARAM=VALUE', default=None,
+        help='Override one swarm parameter for this render only, repeatable. '
+             'Any field of SwarmConfig: work_size, deposit_alpha, brush_radius, '
+             'decay_max, ... Nothing is written back to config.'
     )
     args = parser.parse_args()
+
+    swarm_overrides = {}
+    for item in args.swarm_set or []:
+        key, _, value = item.partition('=')
+        if not value:
+            parser.error(f'--swarm-set expects PARAM=VALUE, got {item!r}')
+        swarm_overrides[key.strip()] = _parse_value(value.strip())
+    if args.agents is not None:
+        swarm_overrides['population_cap'] = args.agents
 
     pipeline = load_config()
     pipeline.create_output_dirs()
@@ -372,10 +434,14 @@ def main():
                 pipeline.render_supersample)
 
     if args.mode == 'timeline':
-        render_timeline(pipeline, reuse_frames=args.reuse_frames, swarm=not args.no_swarm)
+        render_timeline(pipeline, reuse_frames=args.reuse_frames, swarm=not args.no_swarm,
+                        swarm_overrides=swarm_overrides)
     elif args.mode == 'still':
-        time = args.time if args.time is not None else pipeline.timing.nca.end
-        render_still(pipeline, time)
+        # The end of the swarm window, not of the NCA one: a still is nearly
+        # always being read to judge the last stage that touched it.
+        time = args.time if args.time is not None else pipeline.timing.swarm.end
+        render_still(pipeline, time, reuse_frames=args.reuse_frames,
+                     swarm=not args.no_swarm, swarm_overrides=swarm_overrides)
     elif args.mode == 'nca':
         render_nca(pipeline)
     elif args.mode == 'sca':

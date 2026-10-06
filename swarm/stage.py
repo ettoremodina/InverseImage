@@ -31,6 +31,7 @@ from typing import Optional
 import cv2
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from config.swarm_config import SwarmConfig, SwarmStageConfig
 from swarm.colorspace import oklab_to_srgb, srgb_to_oklab
@@ -51,11 +52,13 @@ class SwarmStage:
     """
 
     def __init__(self, target_rgb: np.ndarray, config: SwarmConfig,
-                 stage_config: SwarmStageConfig, canvas_size: int):
+                 stage_config: SwarmStageConfig, canvas_size: int,
+                 window_frames: int = 1):
         self.config = config
         self.stage = stage_config
         self.canvas_size = canvas_size
         self.work_size = config.work_size
+        self._window_frames = max(1, int(window_frames))
 
         # Target at working resolution, in OKLab. This is the only place the
         # timeline's target image enters the swarm, and it reaches the agents
@@ -121,10 +124,6 @@ class SwarmStage:
             self.sim.step()
         self.steps_run += max(1, self.stage.steps_per_frame)
 
-        canvas = self.sim.render_canvas_srgb().cpu().numpy()
-        canvas = cv2.resize(canvas, (self.canvas_size, self.canvas_size),
-                            interpolation=cv2.INTER_LINEAR)
-
         # The swarm shows only where the NCA has tissue, and only as strongly as
         # the blend-in allows -- so the handover from stage 2 is a dissolve, not
         # a cut on the frame the window opens.
@@ -133,6 +132,14 @@ class SwarmStage:
             fade = apply_easing(self.stage.blend_easing,
                                 min(1.0, progress / self.stage.blend_in))
 
+        return self._compose_layer(tissue, fade)
+
+    def _compose_layer(self, tissue: np.ndarray, fade: float) -> np.ndarray:
+        """The current canvas as an RGBA layer at canvas resolution, masked by the tissue."""
+        canvas = self.sim.render_canvas_srgb().cpu().numpy()
+        canvas = cv2.resize(canvas, (self.canvas_size, self.canvas_size),
+                            interpolation=cv2.INTER_LINEAR)
+
         alpha = (tissue[..., 3].astype(np.float32) * fade).clip(0, 255)
 
         out = np.empty((self.canvas_size, self.canvas_size, 4), dtype=np.uint8)
@@ -140,29 +147,90 @@ class SwarmStage:
         out[..., 3] = alpha.astype(np.uint8)
         return out
 
+    # ------------------------------------------------------------ stills
+
+    def warm_to(self, progress: float, tissue: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Advance the swarm to `progress` through its window against one tissue,
+        and return the layer -- the still-frame path (`render.py --mode still`).
+
+        The swarm is stateful: its canvas at 21s is the product of every step
+        since the window opened, so a still cannot simply be evaluated at a
+        time the way the SCA and NCA layers can. This runs those steps without
+        rasterising the frames in between, which is the whole saving: the
+        per-cell Cairo pass, not the simulation, is what makes a video slow.
+
+        The approximation is deliberate and worth stating: the tissue is held
+        fixed at the value it has *at the still's time*, instead of growing
+        under the swarm as it does in the video. At any time after the NCA
+        window closes -- which is every frame worth calibrating on, the NCA
+        ends at 16s and the swarm runs to 22s -- the tissue is already static
+        and the two are identical. Before that, the still shows the swarm as if
+        it had always had the tissue it has now, and `render.py` says so.
+        """
+        window_frames = max(1, int(round(progress * self._window_frames)))
+        steps = self.stage.warmup_steps + window_frames * max(1, self.stage.steps_per_frame)
+
+        base_oklab, nutrient = self._tissue_to_fields(tissue)
+        self.sim = Simulation(self.config, self.target_oklab, base_oklab, nutrient)
+
+        logger.info('Swarm still: %d steps at %d agents, %dpx (tissue held fixed)',
+                    steps, self.config.population_cap, self.work_size)
+        for _ in tqdm(range(steps), desc='Swarm', leave=False):
+            self.sim.step()
+        self.steps_run = steps
+
+        return self._compose_layer(tissue, fade=1.0)
+
     # ------------------------------------------------------------ diagnostics
 
     def report(self):
-        """Log the §12 headline once the render is done."""
+        """
+        Log what the swarm actually contributed.
+
+        This used to print `1 - final_error / sim.baseline_error` over the whole
+        frame, and that number was worthless in production for two compounding
+        reasons. `baseline_error` is captured when the simulation is built --
+        at the *start* of the swarm window, when the NCA still has four seconds
+        of growing to do -- so most of the reported drop was stage 2 finishing
+        its own job, not stage 3 doing anything. And measured over the whole
+        frame, ~80% of the pixels are background that both images already agree
+        on, which shrinks whatever is left by another factor of five. It read
+        +14.9% on a run whose real contribution was +1.5%.
+
+        What is printed instead is `swarm.quality`: the canvas compared against
+        the tissue it is painting on *right now*, on the tissue only, plus the
+        share of that tissue it has actually put paint on. Those two numbers
+        together are the ones that predict whether anything is visible.
+        """
         if self.sim is None or not self.sim.history:
             logger.info('Swarm stage: never activated (no tissue in its window)')
             return
 
+        from swarm.quality import measure_simulation
+
+        quality = measure_simulation(self.sim)
         last = self.sim.history[-1]
-        improvement = 1.0 - last.mean_error / max(self.sim.baseline_error, 1e-9)
-        logger.info('Swarm stage: %d steps | error %.5f vs stage-2 %.5f (%+.2f%%) | '
-                    'pop %d | eating %.0f%%',
-                    self.steps_run, last.mean_error, self.sim.baseline_error,
-                    improvement * 100, last.population, last.positive_gain_fraction * 100)
+        logger.info('Swarm stage: %d steps | %+.2f%% error on the tissue vs the NCA under it '
+                    '| painted %.0f%% of it | stroke coherence %.2f | pop %d | eating %.0f%%',
+                    self.steps_run, quality.improvement * 100, quality.coverage * 100,
+                    quality.stroke_coherence, last.population,
+                    last.positive_gain_fraction * 100)
 
 
-def build_swarm_stage(pipeline) -> Optional[SwarmStage]:
+def build_swarm_stage(pipeline, overrides: dict = None) -> Optional[SwarmStage]:
     """
     Assemble the stage from a `PipelineConfig`.
 
     The swarm's parameters come from the lab preset named in
     `SwarmStageConfig.preset`, so production runs exactly what the lab
     calibrated instead of a second copy of the numbers.
+
+    `overrides` is applied **last**, after the preset and after the population
+    has been scaled for the working resolution -- so `population_cap` given
+    here means that many agents, literally, and not that many times four.
+    Hand tuning against a still (`render.py --mode still --swarm-set ...`) is
+    the only caller that passes it.
     """
     from config.lab_config import PRESETS
     from config.swarm_config import apply_overrides
@@ -191,10 +259,15 @@ def build_swarm_stage(pipeline) -> Optional[SwarmStage]:
     config.sim_steps = stage_config.warmup_steps + window_frames * stage_config.steps_per_frame
     config.metrics_stride = max(1, stage_config.steps_per_frame)
 
-    target_rgb, _ = load_target(pipeline.target_image, work_size)
+    if overrides:
+        config = apply_overrides(config, overrides)
+        logger.info('Swarm overrides: %s',
+                    ' '.join(f'{k}={v}' for k, v in sorted(overrides.items())))
+
+    target_rgb, _ = load_target(pipeline.target_image, config.work_size)
 
     logger.info("Swarm stage: preset '%s', %d agents at %dpx, %d simulated steps "
-                "over %d frames", stage_config.preset, population, work_size,
-                config.sim_steps, window_frames)
+                "over %d frames", stage_config.preset, config.population_cap,
+                config.work_size, config.sim_steps, window_frames)
 
-    return SwarmStage(target_rgb, config, stage_config, pipeline.canvas_size)
+    return SwarmStage(target_rgb, config, stage_config, pipeline.canvas_size, window_frames)

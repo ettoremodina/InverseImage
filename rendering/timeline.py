@@ -256,12 +256,20 @@ class TimelineRenderer:
         logger.info('Saved timeline animation: %s', output_path)
 
     def render_still(self, sca_data: Dict[str, Any], nca_data: Dict[str, Any],
-                     time: float) -> np.ndarray:
+                     time: float, stages: Optional[Dict[str, StageLayer]] = None) -> np.ndarray:
         """
         One frame at an arbitrary time, fully graded.
 
         Used for calibration: staring at a still frame is the only sane way to
         tune cellularity, lighting and grading without re-rendering a video.
+
+        The swarm needs different treatment from the other two stages, and this
+        is the only place in the file where that shows. SCA and NCA are
+        functions of time -- ask for 21s and they draw 21s. The swarm is a
+        simulation, so its canvas at 21s only exists if the steps that produced
+        it have been run. `SwarmStage.warm_to` runs them, skipping the
+        rasterisation of the frames in between, which is where the time
+        actually goes.
         """
         timing = self.timing
         max_depth = max_polyline_depth(sca_data['polylines'])
@@ -286,6 +294,14 @@ class TimelineRenderer:
         canvas = composite(self._background(), tree)
         if flesh is not None:
             canvas = composite(canvas, flesh)
+
+        swarm = (stages or {}).get('swarm')
+        if swarm is not None and flesh is not None:
+            swarm_progress = window_progress(timing.swarm, time)
+            if swarm_progress > 0.0:
+                swarm_layer = swarm.warm_to(swarm_progress, flesh)
+                if swarm_layer is not None:
+                    canvas = composite(canvas, swarm_layer)
 
         total_frames = max(1, int(round(timing.total_duration * self.fps)))
         crop = self.camera.crop(time * self.fps / max(1, total_frames - 1))

@@ -54,7 +54,7 @@ RepopulationMode = Literal['nutrient', 'survivor']
 class SwarmConfig:
     # ==================== scale & device ====================
     work_size: int = 256
-    population_cap: int = 4096
+    population_cap: int = 10000
     min_population_fraction: float = 0.05   # floor, as a fraction of population_cap (§5.7)
     device: str = 'cpu'
     seed: int = 0

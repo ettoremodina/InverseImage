@@ -242,6 +242,46 @@ semplicemente non esiste e tutto il resto si comporta come prima.
 
 ---
 
+## 3.6 Taratura a mano su un fermo immagine
+
+La suite ottimizza contro il surrogato di laboratorio a 256px. Per giudicare **come si
+vede davvero**, sul tessuto NCA vero e dentro il grading, serve un fermo immagine di
+produzione — e serve che costi secondi, non minuti:
+
+```bash
+python render.py --mode still --reuse-frames --agents 40000 --swarm-set deposit_alpha=0.30
+```
+
+Senza `--time` il fermo cade alla **fine della finestra dello sciame** (22s), cioè sullo
+stato finale. `--swarm-set` accetta qualunque campo di `SwarmConfig`, è ripetibile e non
+scrive niente in config: uno sweep è un ciclo di shell, non una serie di modifiche.
+
+Perché è veloce, e perché non è banale che lo sia: lo sciame **non è una funzione del
+tempo** come SCA e NCA — la sua tela a 22s esiste solo se i passi che l'hanno prodotta
+sono stati eseguiti. `SwarmStage.warm_to` li esegue, saltando la rasterizzazione dei
+frame intermedi, ed è lì che sta il risparmio: il ciclo Cairo per cella è ciò che rende
+lento un video, non la simulazione.
+
+Un'approssimazione dichiarata: il tessuto resta fermo al valore che ha all'istante
+richiesto, invece di crescere sotto lo sciame. Dopo la chiusura della finestra NCA (16s)
+è esatto; prima, il fermo lusinga lo sciame e `render.py` lo dice a log.
+
+### Costo misurato (GPU, percorso di produzione, 2460 step)
+
+| configurazione | tempo simulazione | still completo |
+| --- | --- | --- |
+| 512px, 10 000 agenti | 14,4 s | ~19 s |
+| 512px, 40 000 agenti | 14,6 s | ~19 s |
+| 1024px, 40 000 agenti | 23,6 s | ~23 s |
+| 1024px, 100 000 agenti | 19,1 s | ~23 s |
+
+**Il numero di agenti è praticamente gratis su GPU** fino a 100k: il passo è dominato
+dalle operazioni sui campi a risoluzione fissa e dall'overhead di lancio dei kernel, non
+dagli agenti. Raddoppiare `work_size` costa ~60%. Su CPU invece scala: 25 step/s a 4k
+contro 12 step/s a 64k.
+
+---
+
 ## 4. Riferimenti misurati
 
 Tutti su `images/jellyfish.png`, 256px, surrogato a 128px, 4096 agenti.
