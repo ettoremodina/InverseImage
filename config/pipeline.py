@@ -259,4 +259,6 @@ def load_config() -> PipelineConfig:
     The config is code-based: edit the dataclass defaults in this file.
     All scripts go through this function so they always agree on paths.
     """
-    return PipelineConfig()
+    import os
+    target = os.environ.get('INVERSEIMAGE_TARGET')  # set by run.py: one image for all three stages
+    return PipelineConfig(target_image=target) if target else PipelineConfig()
