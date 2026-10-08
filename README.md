@@ -74,6 +74,8 @@ We don't just display the pixels. We treat the NCA output as a **flow field**.
 
 The pipeline is controlled by a single configuration file: `config/pipeline.py`.
 
+**Shortcut:** `python run.py images/your_image.png` runs steps 2–4 below in order (add `--skip-train` to render again with the trained model).
+
 ### 1. Configure
 Open `config/pipeline.py` and set your target image:
 ```python
